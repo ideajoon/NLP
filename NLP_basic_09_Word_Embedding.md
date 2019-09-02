@@ -1,0 +1,1797 @@
+
+written by ideajoon<br/>
+※ 참고 : 딥 러닝을 이용한 자연어 처리 입문 (https://wikidocs.net/book/2155) 자료를 공부하고 정리함
+
+# 09. 워드 임베딩(Word Embedding)
+
+단어의 의미를 벡터화시킬 수 있는 이번 챕터에서 배우게 될 워드투벡터(Word2Vec)와 글로브(Glove)가 많이 사용
+
+## 목차
+1. 워드 임베딩(Word Embedding)
+2. 워드투벡터(Word2Vec)
+3. 글로브(GloVe)
+4. 사전 훈련된 워드 임베딩(Pre-trained Word Embedding)
+5. 엘모(Embeddings from Language Model, ELMo)
+
+## 1. 워드 임베딩(Word Embedding)
+
+워드 임베딩(Word Embedding)은 단어를 벡터로 표현하는 대표적인 방법으로 주로 희소 표현에서 밀집 표현으로 변환하는 것을 의미합니다.
+
+### 1) 희소 표현(Sparse Representation)
+
+원-핫 인코딩을 통해서 나온 원-핫 벡터들은 표현하고자 하는 단어의 인덱스의 값만 1이고, 나머지 인덱스에는 전부 0으로 표현되는 벡터 표현 방법이었습니다. 이렇게 벡터 또는 행렬(matrix)의 값이 대부분이 0으로 표현되는 방법을 희소 표현(sparse representation)이라고 합니다.
+
+희소 벡터의 문제점은 단어의 개수가 늘어나면 벡터의 차원이 한없이 커진다는 점입니다. 
+
+이러한 벡터 표현은 공간적 낭비를 불러일으킵니다. 뿐만 아니라, 원-핫 벡터는 단어의 의미를 담지 못한다는 단점을 갖고있습니다.
+
+### 2) 밀집 표현(Dense Representation)
+
+밀집 표현은 벡터의 차원을 단어 집합의 크기로 상정하지 않습니다. 사용자가 설정한 값으로 모든 단어의 벡터 표현의 차원을 맞춥니다. 또한, 이 과정에서 더 이상 0과 1만 가진 값이 아니라 실수값을 가지게 됩니다.
+
+사용자가 밀집 표현의 차원을 128로 설정한다면, 모든 단어의 벡터 표현의 차원은 128로 바뀌면서 모든 값이 실수가 됩니다.
+
+
+Ex) 강아지 = [0.2 1.8 1.1 -2.1 1.1 2.8 ... 중략 ...] # 이 벡터의 차원은 128
+
+
+이 경우 벡터의 차원이 조밀해졌다고 하여 밀집 벡터(dense vector)라고 합니다.
+
+### 3) 워드 임베딩(Word Embedding)
+
+단어를 밀집 벡터(dense vector)의 형태로 표현하는 방법을 워드 임베딩(word embedding)이라고 합니다.
+
+임베딩 과정을 통해 나온 결과라고 하여 임베딩 벡터(embedding vector)라고도 합니다.
+
+워드 임베딩 방법론으로는 DTM에 적용했던 LSA, 그 외 유명한 방법론들로 이번 챕터에서 배우게 될 Word2Vec, FastText, Glove 등이 있습니다. 
+
+아래의 표는 앞서 배운 원-핫 벡터와 지금 배우고 있는 임베딩 벡터의 차이를 보여줍니다.
+
+|구분|원-핫 벡터|임베딩 벡터|
+|---|---|---|
+|차원|고차원(단어 집합의 크기)|저차원|
+|다른 표현|희소 벡터의 일종|밀집 벡터의 일종|
+|표현 방법|수동|훈련 데이터로부터 학습함|
+|값의 타입|1과 0|실수|
+
+https://colah.github.io/posts/2014-07-NLP-RNNs-Representations/
+
+## 2. 워드투벡터(Word2Vec)
+
+단어 간 유사성을 고려하기 위해서는 단어의 의미를 벡터화 필요
+
+그리고 이를 가능하게 하는 방법이 워드투벡터(Word2Vec)입니다.
+
+![](https://wikidocs.net/images/page/22660/word2vec.PNG)
+
+위 사이트는 한국어로 워드투벡터 연산을 해볼 수 있는 사이트입니다. 위 사이트에서는 단어들로 더하기, 빼기 연산을 할 수 있습니다. 예를 들어 아래의 식에서 좌변을 집어 넣으면, 우변의 답들이 나옵니다.
+
+
+고양이 + 애교 = 강아지<br/>
+한국 - 서울 + 도쿄 = 일본<br/>
+박찬호 - 야구 + 축구 = 호나우두<br/>
+
+
+신기하게도 단어가 갖고있는 의미들을 가지고 연산을 하고 있는 것처럼 보입니다. 이런 연산이 가능한 이유는 각 단어에 있는 어떤 상징성, 의미가 벡터로 계산되었기 때문입니다. 어떻게 이런 일이 가능한 것일까요?
+
+### 1) 희소 표현(Sparse Representation)
+
+원-핫 벡터들은 표현하고자 하는 단어의 인덱스의 값만 1이고, 나머지 인덱스에는 전부 0으로 표현되는 벡터 표현 방법이었습니다. 이렇게 벡터 또는 행렬(Matrix)의 값이 대부분이 0으로 표현되는 방법을 희소 표현(Sparse Representation)이라고 합니다.
+
+하지만 이러한 표현 방법은 각 단어간 유사성을 표현할 수 없다는 단점이 있었고, 이를 위한 대안으로 단어의 '의미'를 다차원 공간에 벡터화하는 방법을 찾게되는데, 이러한 표현 방법을 분산 표현(Distributed Representation)이라고 합니다.
+
+### 2) 분산 표현(Distributed Representation)
+
+분산 표현(Distributed Representation) 방법은 기본적으로 분포 가설(Distributional Hypothesis)이라는 가정 하에 만들어진 표현 방법입니다. 이 가정은 '비슷한 위치에서 등장하는 단어들은 비슷한 의미를 가진다'라는 가정입니다.
+
+이렇게 표현된 벡터들은 원-핫 벡터처럼 굳이 벡터의 차원이 단어 집합(vocabulary)의 크기일 필요가 없으므로, 벡터의 차원이 저차원으로 줄어듭니다.
+
+Ex) 강아지 = [ 0 0 0 0 1 0 0 0 0 0 0 0 ... 중략 ... 0] => 원핫벡터
+
+Ex) 강아지 = [0.2 0.3 0.5 0.7 0.2 ... 중략 ... 0.2] => 임베딩 된 벡터
+
+요약하면 희소 표현이 고차원에 각 차원이 분리된 표현 방법이었다면, 분산 표현은 저차원에 단어의 의미를 여러 차원에다가 분산하여 표현합니다. 그리고 이런 표현 방법을 사용하면 단어 간 유사도를 계산할 수 있습니다.
+
+이를 위한 학습 방법으로는 전통적인 NNLM, RNNLM이 있었으나 현재에 와서는 해당 방법들의 속도를 대폭 개선시킨 워드투벡터(Word2Vec)가 쓰이고 있습니다.
+
+### 3) CBOW(Continuous Bag of Words)
+
+Word2Vec에는 CBOW(Continuous Bag of Words)와 Skip-Gram 두 가지 방식이 있습니다. 
+
+- CBOW<br/>
+주변에 있는 단어들을 가지고, 중간에 있는 단어들을 예측하는 방법입니다.
+
+- Skip-Gram<br/>
+중간에 있는 단어로 주변 단어들을 예측하는 방법입니다.
+
+- 예문 : "The fat cat sat on the mat"
+
+ {"The", "fat", "cat", "on", "the", "mat"}으로부터 sat을 예측하는 것은 CBOW가 하는 일입니다.
+
+예측해야하는 단어 sat을 중심 단어(center word)라고 하고, 예측에 사용되는 단어들을 주변 단어(context word)라고 합니다.
+
+중심 단어를 예측하기 위해서 앞, 뒤로 몇 개의 단어를 볼지를 결정했다면 이 범위를 윈도우(window)라고 합니다. 예를 들어서 윈도우 크기가 2이고, 예측하고자 하는 중심 단어가 sat이라고 한다면 앞의 두 단어인 fat와 cat, 그리고 뒤의 두 단어인 on, the를 참고합니다.
+
+ 향후, 수학적 일반화를 위해 미리 언급하자면 윈도우 크기가 m이라고 한다면, 실제 중심 단어를 예측하기 위해 참고하려고 하는 주변 단어의 개수는 2m이 될 것입니다.
+
+![](https://wikidocs.net/images/page/22660/%EB%8B%A8%EC%96%B4.PNG)
+
+윈도우 크기를 정했다면, 윈도우를 계속 움직여서 주변 단어와 중심 단어 선택을 바꿔가며 학습을 위한 데이터 셋을 만들 수 있는데, 이 방법을 슬라이딩 윈도우(sliding window)라고 합니다.
+
+Word2Vec에서 입력은 모두 원-핫 벡터가 되어야 하는데, 우측 그림은 중심 단어와 주변 단어를 어떻게 선택했을 때에 따라서 각각 어떤 원-핫 벡터가 되는지를 보여줍니다.
+
+![](https://wikidocs.net/images/page/22660/nn.PNG)
+
+CBOW의 인공 신경망을 간단히 도식화하면 위와 같습니다. 
+
+- 입력층(Input layer)<br/>
+입력으로서 앞, 뒤로 사용자가 정한 윈도우 크기 범위 안에 있는 주변 단어들의 원-핫 벡터가 들어감
+- 출력층(Output layer)<br/>
+예측하고자 하는 중간 단어의 원-핫 벡터가 필요
+
+Word2Vec은 딥 러닝 모델(Deep Learning Model)이 아니라는 점입니다. 보통 딥 러닝이라함은, 은닉층의 개수가 충분히 쌓인 신경망을 학습할 때를 말하며 Word2Vec는 오직 하나의 은닉층만이 존재합니다. 이렇게 은닉층(Hidden Layer)이 1개인 경우에는 심층신경망(Deep Neural Network)이 아니라 얕은신경망(Shallow Neural Network)이라고 할 수 있습니다.
+
+![](https://wikidocs.net/images/page/22660/%EC%9B%8C%EB%B2%A1.PNG)
+
+이 그림에서 주목해야할 것은 두 가지 입니다.
+
+하나는 은닉층의 크기가 N이라는 점입니다. CBOW에서 은닉층의 크기 N은 임베딩하고 난 벡터의 크기가 됩니다. 다시 말해, 위의 그림에서 은닉층의 크기는 N=5이기 때문에 해당 CBOW를 수행하고나서 나오는 벡터의 크기는 5가 될 것입니다.
+
+두번째는 입력층과 은닉층사이의 가중치 W는 V × N 행렬이며, 은닉층에서 출력층사이의 가중치 W'는 N × V 행렬이라는 점입니다. 여기서 V는 단어 집합의 크기를 의미합니다. 즉, 위의 그림처럼 원-핫 벡터의 차원이 7이고, N은 5라면 가중치 W는 7 × 5 행렬이고, W'는 5 × 7 행렬이 될 것입니다. 주의할 점은 이 두 행렬은 동일한 행렬을 전치(transpose)한 것이 아니라, 서로 다른 행렬이라는 점입니다.
+
+인공 신경망의 훈련 전에 이 가중치 행렬 W와 W'는 대게 굉장히 작은 랜덤 값을 가지게 됩니다. CBOW는 주변 단어로 중심 단어를 더 정확히 맞추기 위해 계속해서 이 W와 W'를 학습해가는 구조입니다.
+
+![](https://wikidocs.net/images/page/22660/cbow_1%EB%8B%A8%EA%B3%84.PNG)
+
+입력 벡터는 원-핫 벡터이기 때문에 i번째 인덱스에 1이라는 값을 가지고 그 외의 0의 값을 가지는 입력 벡터와 가중치 W 행렬의 곱은 사실 W행렬의 i번째 행을 그대로 읽어오는 것과(lookup) 동일합니다. 그래서 이 작업을 테이블 룩업(table lookup)이라고 부릅니다.
+
+![](https://wikidocs.net/images/page/22660/2m.PNG)
+
+이렇게 각 주변 단어의 원-핫 벡터에 대해서 가중치 W가 곱해서 생겨진 결과 벡터들은 은닉층에서 만나 이 벡터들의 평균인 벡터를 구하게 됩니다.
+
+만약 윈도우 크기가 2라면, 입력 벡터의 총 개수는 2m이기때문에 중간 단어를 예측하기 위해서는 총 4개가 입력 벡터로 들어가게 됩니다. 그렇기 때문에 평균을 구할 때는 4개의 결과 벡터에 대해서 평균을 구하게 됩니다.
+
+이와는 반대로 뒤에서 보게되겠지만, Skip-Gram은 입력이 중심 단어 하나이기때문에 은닉층에서 벡터의 평균을 구하지 않습니다.
+
+![](https://wikidocs.net/images/page/22660/%ED%81%AC%EB%A1%9C%EC%8A%A4%EC%97%94%ED%8A%B8%EB%A1%9C%ED%94%BC.PNG)
+
+이렇게 구해진 평균 벡터는 두번째 가중치 행렬인 W'와 곱해집니다. 이렇게 되면 크기가 V와 동일한 벡터. 즉, 인풋이었던 원-핫 벡터들과 차원이 동일한 벡터가 나오게 됩니다. 만약 입력 벡터의 차원이 7이었다면 여기서 나오는 벡터도 마찬가지입니다.
+
+이 벡터에 CBOW는 소프트맥스(softmax) 함수를 취하는데, 소프트맥스 함수로 인한 출력값은 0과 1사이의 실수로, 각 원소의 총 합은 1이 되는 상태로 바뀝니다. 이렇게 나온 벡터를 스코어 벡터(score vector)라고 합니다.
+
+스코어 벡터의 j번째 인덱스가 가진 0과 1사이의 값은 j번째 단어가 중심 단어일 확률을 나타냅니다.
+
+스코어 벡터를 y^라고 하겠습니다. 중심 단어를 y로 했을 때, 이 두 벡터가 가까워지게 하기위해서 CBOW는 cross-entropy 함수를 사용합니다. 즉, 다른 말로 loss function으로 cross-entropy 함수를 사용하는 것입니다.
+
+![](https://wikidocs.net/images/page/22660/crossentrophy.PNG)
+
+cross-entropy 함수에 실제 중심 단어인 원-핫 벡터와 스코어 벡터를 입력값으로 넣고, 이를 식으로 표현하면 위와 같습니다.
+
+![](https://wikidocs.net/images/page/22660/crossentrophy2.PNG)
+
+이제 역전파(Back Propagation)를 수행하면 W와 W'가 학습이 되는데, 학습이 다 되었다면 N차원의 크기를 갖는 W의 행이나 W'의 열로부터 어떤 것을 임베딩 벡터로 사용할지를 결정하면 됩니다. 때로는 W와 W'의 평균치를 가지고 임베딩 벡터를 선택하기도 합니다.
+
+### 4) Skip-gram
+
+앞서 CBOW에서는 주변 단어를 통해 중심 단어를 예측했다면, Skip-gram은 중심 단어에서 주변 단어를 예측하려고 합니다.
+
+![](https://wikidocs.net/images/page/22660/%EC%8A%A4%ED%82%B5%EA%B7%B8%EB%9E%A8.PNG)
+
+이제 중심 단어에 대해서 주변 단어를 예측하기 때문에, 은닉층에서 벡터들의 평균을 구하는 과정은 없습니다.
+
+여러 논문에서 성능 비교를 진행했을 때, 전반적으로 Skip-gram이 CBOW보다 성능이 좋다고 알려져 있습니다.
+
+### 5) NNLM Vs. Word2Vec
+
+![](https://wikidocs.net/images/page/22660/word2vec_renew_7.PNG)
+
+NNLM은 단어 간 유사도를 구할 수 있도록 워드 임베딩의 개념을 도입하였고, NNLM의 느린 학습 속도와 정확도를 개선하여 탄생한 것이 Word2Vec입니다.
+
+Word2Vec은 중심 단어를 예측하게 하므로서 NNLM이 예측 단어의 이전 단어들만을 참고하였던 것과는 달리, Word2Vec은 예측 단어의 전, 후 단어들을 모두 참고합니다.
+
+Word2Vec은 우선 NNLM에 존재하던 활성화 함수가 있는 은닉층을 제거하였습니다. 이에 따라 투사층 다음에 바로 출력층으로 연결되는 구조입니다.
+
+Word2Vec이 NNLM보다 학습 속도에서 강점을 가지는 이유는 은닉층을 제거한 것뿐만 아니라 추가적으로 사용되는 기법들 덕분이기도 합니다. 대표적인 기법으로 계층적 소프트맥스(hierarchical softmax)와 네거티브 샘플링(negative sampling)이 있다.
+
+입력층에서 투사층, 투사층에서 은닉층, 은닉층에서 출력층으로 향하며 발생하는 NNLM와 ord2Vec의 연산량은 아래와 같습니다.
+
+NNLM :$(n × m) + (n × m × h) + (h × V)$
+
+Word2Vec :$(n × m) + (m × log(V))$
+
+계층적 소프트맥스(hierarchical softmax)와 네거티브 샘플링(negative sampling)과 같은 기법을 사용하면 Word2Vec은 출력층에서의 연산에서 V를 log(V)로 바꿀 수 있는데, 이에 따라 Word2Vec의 연산량은 NNLM보다 배는 빠른 학습 속도를 가진다.
+
+### 6) 네거티브 샘플링(Negative Sampling)
+
+대체적으로 요즘에 Word2Vec를 사용한다고 하면 SGNS(Skip-Gram with Negative Sampling)을 사용하는 것이 보통입니다.
+
+위에서 배운 Word2Vec 모델에는 한 가지 문제점이 있습니다. 바로 속도입니다. 
+
+Word2Vec의 마지막 단계를 주목해봅시다. 출력층에 있는 소프트맥스 함수는 단어 집합 크기의 벡터 내의 모든 값을 0과 1사이의 값이면서 모두 더하면 1이 되도록 바꾸는 작업을 수행합니다. 그리고 이에 대한 오차를 구하고 모든 단어에 대한 임베딩을 조정합니다. 그 단어가 중심 단어나 주변 단어와 전혀 상관없는 단어라도 마찬가지 입니다. 그런데 만약 단어 집합의 크기가 수백만에 달한다면 이 작업은 굉장히 무거운 작업입니다.
+
+여기서 중요한 건 Word2Vec이 모든 단어 집합에 대해서 소프트맥스 함수를 수행하고, 역전파를 수행하므로 주변 단어와 상관 없는 모든 단어까지의 워드 임베딩 조정 작업을 수행한다는 겁니다.
+
+만약 마지막 단계에서 '강아지'와 '고양이'와 같은 단어에 집중하고 있다면, Word2Vec은 사실 '돈가스'나 '컴퓨터'와 같은 연관 관계가 없는 수많은 단어의 임베딩을 조정할 필요가 없습니다.
+
+이를 조금 더 효율적으로 할 수 있는 방법이 없을까요? 전체 단어 집합이 아니라 일부 단어 집합에 대해서만 고려하면 안 될까요? 이렇게 일부 단어 집합을 만들어봅시다. '강아지', '고양이', '애교'와 같은 주변 단어들을 가져옵니다. 그리고 여기에 '돈가스', '컴퓨터', '회의실'과 같은 랜덤으로 선택된 주변 단어가 아닌 상관없는 단어들을 일부만 갖고옵니다. 이렇게 전체 단어 집합보다 훨씬 작은 단어 집합을 만들어놓고 마지막 단계를 이진 분류 문제로 바꿔버리는 겁니다. 즉, Word2Vec은 주변 단어들을 긍정(positive)으로 두고 랜덤으로 샘플링 된 단어들을 부정(negative)으로 둔 다음에 이진 분류 문제를 수행합니다. 이는 기존의 다중 클래스 분류 문제를 이진 분류 문제로 바꾸면서도 연산량에 있어서 훨씬 효율적입니다.
+
+### 7) 영어 Word2vec 만들기
+
+파이썬의 gensim 패키지에는 Word2Vec을 지원하고 있어, gensim 패키지를 이용하면 손쉽게 단어를 임베딩 벡터로 변환시킬 수 있습니다.
+
+https://wit3.fbk.eu/get.php?path=XML_releases/xml/ted_en-20160408.zip&filename=ted_en-20160408.zip
+
+다운로드 받은 후에 압축을 풀면 ted_en-20160408.xml이라는 파일을 얻을 수 있습니다.
+
+파일을 열어보면 xml 문법으로 작성되어 있어 자연어를 얻기 위해서는 전처리가 필요함을 확인할 수 있습니다. 우리가 얻고자 하는 데이터는 영어문장으로만 구성된 내용을 담고 있는 <content>와 </content> 사이의 내용입니다. 데이터 전처리 작업을 통해 다른 xml 문법들은 제외시키고, 해당 내용만 가져와야 합니다. 뿐만 아니라, <content>와 </content> 사이의 내용 중에는 (Laughter)나 (Applause)와 같은 배경음을 나타내는 단어도 등장하는데 이 또한 제거해야 합니다.
+
+```
+<file id="1">
+  <head>
+
+<url>http://www.ted.com/talks/knut_haanaes_two_reasons_companies_fail_and_how_to_avoid_them</url>
+       <pagesize>72832</pagesize>
+
+- 이하 xml 문법 중략 -
+
+<content>
+Here are two reasons companies fail: they only do more of the same, or they only do what's new.
+To me the real, real solution to quality growth is figuring out the balance between two activities: exploration and exploitation. Both are necessary, but it can be too much of a good thing.
+Consider Facit. I'm actually old enough to remember them. Facit was a fantastic company. They were born deep in the Swedish forest, and they made the best mechanical calculators in the world. Everybody used them. And what did Facit do when the electronic calculator came along? They continued doing exactly the same. In six months, they went from maximum revenue ... and they were gone. Gone.
+To me, the irony about the Facit story is hearing about the Facit engineers, who had bought cheap, small electronic calculators in Japan that they used to double-check their calculators.
+(Laughter)
+- 이하 content 내용 중략 -
+Second question is: When did I explore something new last, and what kind of effect did it have on me? Is that something I should do more of? In my case, yes.
+So let me leave you with this. Whether you're an explorer by nature or whether you tend to exploit what you already know, don't forget: the beauty is in the balance.
+Thank you.
+(Applause)</content>
+</file>
+<file id="2">
+    <head>
+
+<url>http://www.ted.com/talks/lisa_nip_how_humans_could_evolve_to_survive_in_space<url>
+   <pagesize>73252</pagesize>
+
+- 이하 중략 -
+```
+
+
+```python
+import re
+from lxml import etree
+import nltk
+from nltk.tokenize import word_tokenize, sent_tokenize
+
+targetXML=open('ted_en-20160408.xml', 'r', encoding='UTF8')
+target_text = etree.parse(targetXML)
+parse_text = '\n'.join(target_text.xpath('//content/text()'))
+# xml 파일로부터 <content>와 </content> 사이의 내용만 가져옵니다.
+
+content_text = re.sub(r'\([^)]*\)', '', parse_text)
+# 정규 표현식의 sub 모듈을 통해 content 중간에 등장하는 (Audio), (Laughter) 등의 배경음 부분을 제거합니다.
+# 해당 코드는 괄호로 구성된 내용을 제거하는 코드입니다.
+
+sent_text=sent_tokenize(content_text)
+# 입력 코퍼스에 대해서 NLTK를 이용하여 문장 토큰화를 수행합니다.
+
+normalized_text = []
+for string in sent_text:
+     tokens = re.sub(r"[^a-z0-9]+", " ", string.lower())
+     normalized_text.append(tokens)
+# 각 문장에 대해서 구두점을 제거하고, 대문자를 소문자로 변환합니다.
+
+result=[]
+result=[word_tokenize(sentence) for sentence in normalized_text]
+# 각 문장에 대해서 NLTK를 이용하여 단어 토큰화를 수행합니다.
+
+print(result[:10])
+# 문장 10개만 출력
+```
+
+    [['here', 'are', 'two', 'reasons', 'companies', 'fail', 'they', 'only', 'do', 'more', 'of', 'the', 'same', 'or', 'they', 'only', 'do', 'what', 's', 'new'], ['to', 'me', 'the', 'real', 'real', 'solution', 'to', 'quality', 'growth', 'is', 'figuring', 'out', 'the', 'balance', 'between', 'two', 'activities', 'exploration', 'and', 'exploitation'], ['both', 'are', 'necessary', 'but', 'it', 'can', 'be', 'too', 'much', 'of', 'a', 'good', 'thing'], ['consider', 'facit'], ['i', 'm', 'actually', 'old', 'enough', 'to', 'remember', 'them'], ['facit', 'was', 'a', 'fantastic', 'company'], ['they', 'were', 'born', 'deep', 'in', 'the', 'swedish', 'forest', 'and', 'they', 'made', 'the', 'best', 'mechanical', 'calculators', 'in', 'the', 'world'], ['everybody', 'used', 'them'], ['and', 'what', 'did', 'facit', 'do', 'when', 'the', 'electronic', 'calculator', 'came', 'along'], ['they', 'continued', 'doing', 'exactly', 'the', 'same']]
+    
+
+정상적으로 토큰화가 수행되었음을 볼 수 있습니다.
+
+ 이제 해당 데이터를 가지고 Word2Vec을 수행해보도록 하겠습니다.
+
+```
+from gensim.models import Word2Vec
+model = Word2Vec(sentences=result, size=100, window=5, min_count=5, workers=4, sg=0)
+```
+
+여기서 Word2Vec의 하이퍼파라미터값은 다음과 같습니다.
+- size = 워드 벡터의 특징 값. 즉, 임베딩 된 벡터의 차원.
+- window = 컨텍스트 윈도우 크기
+- min_count = 단어 최소 빈도 수 제한 (빈도가 적은 단어들은 학습하지 않는다.)
+- workers = 학습을 위한 프로세스 수
+- sg = 0은 CBOW, 1은 Skip-gram.
+
+Word2Vec는 입력한 단어에 대해서 가장 유사한 단어들을 출력하는 model.wv.most_similar을 지원합니다. 그렇다면, man과 가장 유사한 단어들은 뭐가 있을까요?
+
+```
+a=model.wv.most_similar("man")
+print(a)
+```
+
+```
+[('woman', 0.8412898182868958), ('guy', 0.8099554181098938), ('boy', 0.7764801979064941), ('lady', 0.7613880634307861), ('girl', 0.7509098052978516), ('gentleman', 0.7428570985794067), ('soldier', 0.7122098207473755), ('kid', 0.6934249401092529), ('poet', 0.6682940721511841), ('friend', 0.6607728004455566)]
+```
+
+man과 유사한 단어로 woman, guy, boy, lady, girl, gentleman, soldier, kid, friend를 출력하는 것을 볼 수 있습니다. 이제 Word2Vec를 통해 단어의 유사도를 계산할 수 있게 되었습니다.
+
+### 8) 한국어 Word2Vec 만들기
+
+위키피디아 한국어 덤프 파일을 다운받아서 한국어로 Word2Vec을 직접 진행해보도록 하겠습니다.
+
+한국어는 전처리가 중요하여 토큰화를 할 때 띄어쓰기 단위가 아니라 형태소 단위로 토큰화를 해야 임베딩의 좋은 성능을 얻을 수 있습니다. 간단히 말해서 형태소 분석기를 사용합니다.
+
+#### (1) 위키피디아 한국어 덤프 파일 다운로드
+
+https://dumps.wikimedia.org/kowiki/latest/
+
+![](https://wikidocs.net/images/page/22660/bz2.PNG)
+
+우리가 사용할 데이터는 kowiki-latest-pages-articles.xml.bz2 파일입니다. 해당 파일은 xml 파일이기 대문에, Word2Vec을 원활하게 진행하기 위해서는 텍스트 형식의 파일로 변환해줄 필요가 있습니다.
+
+#### (2) 위키피디아 익스트랙터 다운로드
+
+위키피디아 덤프 파일을 텍스트 형식으로 변환시켜주는 오픈소스인 '위키피디아 익스트랙터'를 사용할 것입니다.
+
+설치(명령 프롬프트)
+
+```
+git clone "https://github.com/attardi/wikiextractor.git"  
+```
+
+다른 방법으로는 https://github.com/attardi/wikiextractor 위 링크로 직접 이동하여 zip 파일로 다운로드 하고 압축을 푼 뒤에, 윈도우의 명령 프롬프트나 MAC과 리눅스의 터미널에서 python setup.py install 명령어를 치면 '위키피디아 익스트랙터'가 다운로드 됩니다.
+
+#### (3) 위키피디아 한국어 덤프 파일 변환
+
+위키피디아 익스트랙터와 위키피디아 한국어 덤프 파일을 동일한 디렉토리 경로에 두고, 아래 명령어를 실행하면 위키피디아 덤프 파일이 텍스트 파일로 변환됩니다. 컴퓨터마다 다르지만 보통 10분 내외의 시간이 걸립니다.
+
+```
+python WikiExtractor.py kowiki-latest-pages-articles.xml.bz2  
+```
+
+텍스트 파일로 변환된 위키피디아 한국어 덤프는 총 6개의 디렉토리(2018년 10월 기준)로 구성되어져 있습니다. AA ~ AF의 디렉토리로 각 디렉토리 내에는 wiki_00 ~ wiki_90이라는 파일들이 들어있습니다. 각 파일들을 열어보면 이와 같은 구성이 반복되고 있습니다.
+
+```
+<doc id="문서 번호" url="실제 위키피디아 문서 주소" title="문서 제목">
+내용
+</doc>
+```
+
+예를 들어서 AA 디렉토리의 wiki_00 파일을 읽어보면, 지미 카터에 대한 내용이 나옵니다.
+
+```
+<doc id="5" url="https://ko.wikipedia.org/wiki?curid=5" title="지미 카터">
+지미 카터
+제임스 얼 "지미" 카터 주니어(, 1924년 10월 1일 ~ )는 민주당 출신 미국 39번째 대통령(1977년 ~ 1981년)이다.
+지미 카터는 조지아 주 섬터 카운티 플레인스 마을에서 태어났다. 조지아 공과대학교를 졸업하였다. 그 후 해군에 들어가 전함·원자력·잠수함의 승무원으로 일하였다. 1953년 미국 해군 대
+위로 예편하였고 이후 땅콩·면화 등을 가꿔 많은 돈을 벌었다.
+... 이하 중략...
+</doc>
+```
+
+우리는 이 AA ~ AF 안의 wiki00 ~ wiki90 파일들을 word2vec의 편의를 위해 하나의 텍스트 파일로 통합할 것입니다. (만약, 더 간단히 하고 싶다면 모든 디렉토리를 통합하지 않고, 하나의 디렉토리 내의 파일들에 대해서만 해도 통합 작업을 진행하면 속도를 단축시킬 수 있습니다. 하지만 보통 학습 데이터의 양이 많을 수록 Word2Vec의 성능이 올라가기 때문에 성능은 전체 파일에 대해서 진행한 경우보다 좋지 않을 수 있습니다.)
+
+#### (4) 훈련 데이터 만들기
+
+a. 윈도우
+
+우선 AA 디렉토리 안의 모든 파일인 wiki00 ~ wiki90에 대해서 wikiAA.txt로 통합해보도록 하겠습니다.
+
+```
+copy AA디렉토리의 경로\wiki* wikiAA.txt
+```
+
+해당 커맨드는 AA디렉토리 안의 wiki로 시작되는 모든 파일을 wikiAA.txt 파일에 전부 복사하라는 의미를 담고있습니다. 결과적으로 wiki00 ~ wiki90파일의 모든 내용은 wikiAA.txt 파일이라는 하나의 파일에 내용이 들어가게 됩니다.
+
+각 디렉토리에 대해서도 동일하게 진행합니다.
+
+```
+copy AB디렉토리의 경로\wiki* wikiAB.txt
+copy AC디렉토리의 경로\wiki* wikiAC.txt
+copy AD디렉토리의 경로\wiki* wikiAD.txt
+copy AE디렉토리의 경로\wiki* wikiAE.txt
+copy AF디렉토리의 경로\wiki* wikiAF.txt
+```
+
+렇게 되면 현재 경로에는 각 디렉토리의 파일들을 하나로 합친 wikiAA.txt 부터 wikiAF.txt라는 6개의 파일이 생깁니다. 그럼 이제 이 파일들에 대해서도 하나의 파일로 합치는 작업을 진행해보도록 하겠습니다.
+
+```
+copy 현재 디렉토리의 경로\wikiA* wiki_data.txt
+```
+
+이제 모든 텍스트 파일을 하나로 만든 훈련 데이터가 완성되었습니다.
+
+b. UNIX와 MAC의 경우
+
+작성예정
+
+#### (5) Word2Vec 작업
+
+
+```python
+f = open('wiki_data.txt 파일의 경로', encoding="utf8")
+```
+
+우선 파일을 불러왔습니다. 이제 줄단위로 파일을 읽을텐데, 파일이 정상적으로 읽히고 있는지 확인하기 위해 책의 지면의 한계상 5개의 줄만 출력해보겠습니다.
+
+
+```python
+i=0
+while True:
+    line = f.readline()
+    if line != '\n':
+        i=i+1
+        print("%d번째 줄 :"%i + line)
+    if i==5:
+        break 
+f.close()
+```
+
+```
+1번째 줄 :<doc id="5" url="https://ko.wikipedia.org/wiki?curid=5" title="지미 카터">
+2번째 줄 :지미 카터
+3번째 줄 :제임스 얼 "지미" 카터 주니어(, 1924년 10월 1일 ~ )는 민주당 출신 미국 39번째 대통령 (1977년 ~ 1981년)이다.
+4번째 줄 :지미 카터는 조지아주 섬터 카운티 플레인스 마을에서 태어났다. 조지아 공과대학교를 졸업하였다. 그 후 해군에 들어가 전함·원자력·잠수함의 승무원으로 일하였다. 1953년 미국 해군 대위로 예편하였고 이후 땅콩·면화 등을 가꿔 많은 돈을 벌었다. 그의 별명이 "땅콩 농부" (Peanut Farmer)로 알려졌다.
+5번째 줄 :1962년 조지아 주 상원 의원 선거에서 낙선하나 그 선거가 부정선거 였음을 입증하게 되어 당선되고, 1966년 조지아 주 지사 선거에 낙선하지만 1970년 조지아 주 지사를 역임했다. 대통령이 되기 전 조지아주 상원의원을 두번 연임했으며, 1971년부터 1975년까지 조지아 지사로 근무했다. 조지아 주지사로 지내면서, 미국에 사는 흑인 등용법을 내세웠다.
+```
+
+정상적으로 출력되는 것을 볼 수 있습니다. 이제 본격적으로 Word2Vec을 위한 학습 데이터를 만들어보겠습니다.
+
+
+```python
+from konlpy.tag import Okt  
+okt=Okt()
+fread = open('wiki_data.txt 파일의 경로', encoding="utf8")
+# 파일을 다시 처음부터 읽음.
+n=0
+result = []
+
+while True:
+    line = fread.readline() #한 줄씩 읽음.
+    if not line: break # 모두 읽으면 while문 종료.
+    n=n+1
+    if n%5000==0: 
+    # 5,000의 배수로 While문이 실행될 때마다 몇 번째 While문 실행인지 출력.
+        print("%d번째 While문."%n)
+    tokenlist = okt.pos(line, stem=True, norm=True) # 단어 토큰화
+    temp=[]
+    for word in tokenlist:
+        if word[1] in ["Noun"]: # 명사일 때만
+            temp.append((word[0])) # 해당 단어를 저장함
+
+    if temp: # 만약 이번에 읽은 데이터에 명사가 존재할 경우에만
+      result.append(temp) # 결과에 저장
+fread.close()
+```
+
+여기서는 형태소 분석기로 KoNLPy의 Okt를 사용하였습니다. 한국어 Word2Vec을 할 때 가장 간단한 전처리 방법은 노이즈가 섞인 데이터로부터 한국어 명사만을 최대한 정확도가 높게 뽑아내는 형태소 분석기를 사용하는 것입니다.
+
+
+```python
+len(result)
+```
+
+```
+2466209
+```
+
+약 240만여개의 줄(line)이 명사 토큰화가 되어 저장되어 있는 상태입니다. 이제 이를 Word2Vec으로 학습시킵니다.
+
+
+```python
+from gensim.models import Word2Vec
+model = Word2Vec(result, size=100, window=5, min_count=5, workers=4, sg=0)
+```
+
+학습을 다했다면 이제 임의의 입력 단어로부터 유사한 단어들을 구해봅시다.
+
+
+```python
+a=model.wv.most_similar("대한민국")
+print(a)
+```
+
+```
+[('한국', 0.6331368088722229), ('우리나라', 0.5405941009521484), ('조선민주주의인민공화국', 0.5400398969650269), ('정보통신부', 0.49965575337409973), ('고용노동부', 0.49638330936431885), ('경남', 0.47878748178482056), ('국내', 0.4761977791786194), ('국무총리실', 0.46891751885414124), ('공공기관', 0.46730121970176697), ('관세청', 0.46708711981773376)]
+```
+
+
+```python
+b=model.wv.most_similar("어벤져스")
+print(b)
+```
+
+```
+[('스파이더맨', 0.8560965657234192), ('아이언맨', 0.8376990556716919), ('데어데블', 0.7797115445137024), ('인크레더블', 0.7791407108306885), ('스타트렉', 0.7752881050109863), ('엑스맨', 0.7738450765609741), ('슈퍼맨', 0.7715340852737427), ('어벤저스', 0.7453964948654175), ('슈퍼히어로', 0.7452991008758545), ('다크나이트', 0.7413955926895142)]
+```
+
+
+```python
+c=model.wv.most_similar("반도체")
+print(c)
+```
+
+```
+[('전자부품', 0.7620885372161865), ('실리콘', 0.7574189901351929), ('집적회로', 0.7497618198394775), ('웨이퍼', 0.7465146780014038), ('태양전지', 0.735146164894104), ('트랜지스터', 0.7293091416358948), ('팹리스', 0.7275552749633789), ('디램', 0.722482442855835), ('전자제품', 0.712360143661499), ('그래핀', 0.7025551795959473)]
+```
+
+### 9) 사전 훈련된 Word2vec 임베딩(Pre-trained Word2vec embedding) 사용하기
+
+어떤 자연어 처리 작업을 할때 임베딩 벡터를 얻고 싶을 때, 케라스의 Embedding()를 사용하여 갖고 있는 훈련 데이터를 가지고 단어 벡터를 학습하는 방식으로 임베딩 벡터를 만들기도 하지만,
+
+다른 훈련 데이터로 사전에 훈련된 워드 임베딩(Pre-trained Word Embedding)를 갖고와서 원하는 작업에 사용 할 수도 있습니다.
+
+예를 들어서 뉴스 분류 작업을 하는데 뉴스 데이터가 부족한 상황이라면, 위키피디아 등과 같은 데이터를 Word2Vec이나 Glove 등으로 사전에 학습시켜놓은 임베딩 벡터들을 갖고와서 사용하는 것이 도움이 될 수 있습니다.
+
+#### (1) 영어
+
+구글이 제공하는 미리 학습된 Word2Vec 모델을 사용하는 방법에 대해서 알아보도록 하겠습니다.
+
+구글은 사전 훈련된 Word2Vec 모델의 약 3백만 개의 단어 벡터들을 제공합니다. 각 벡터의 크기는 300입니다. gensim을 통해서 이 모델을 불러오는 건 매우 간단합니다.
+
+모델 다운로드 경로 : <br/>
+https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit
+
+파일의 압축을 풀면 약 3.3GB 정도의 파일이 나옵니다.
+
+
+```python
+import gensim
+
+# 구글의 이미 훈련된 Word2vec 모델을 로드합니다.
+model = gensim.models.Word2Vec.load_word2vec_format('./model/GoogleNews-vectors-negative300.bin', binary=True)  
+```
+
+
+```python
+word2vec.vectors.shape
+```
+
+```
+(3000000, 300)
+# 파일의 크기가 3기가가 넘는 이유를 계산해보면 다음과 같습니다.
+# 3 million words * 300 features * 4bytes/feature = ~3.35GB
+```
+
+
+```python
+print (model.similarity('this', 'is')) #유사도 계산하기
+print (model.similarity('post', 'book'))
+```
+
+```
+0.407970363878
+0.0572043891977
+```
+
+#### (2) 한국어
+
+모델 다운로드 경로 : <br/>
+https://drive.google.com/file/d/0B0ZXk88koS2KbDhXdWg1Q2RydlU/view
+
+위의 링크로부터 77MB 크기의 ko.zip 파일을 다운로드 받아서 압축을 풀면 ko.bin이라는 50MB 크기의 파일이 있습니다.
+
+이 파일을 로드하고 유사도를 계산해보도록 하겠습니다.
+
+
+```python
+import gensim
+model = gensim.models.Word2Vec.load('ko.bin 파일의 경로')
+```
+
+
+```python
+a=model.wv.most_similar("강아지")
+print(a)
+```
+
+```
+[('고양이', 0.7290453314781189), ('거위', 0.7185634970664978), ('토끼', 0.7056223750114441), ('멧돼지', 0.6950401067733765), ('엄마', 0.693433403968811), ('난쟁이', 0.6806551218032837), ('한마리', 0.6770296096801758), ('아가씨', 0.675035297870636), ('아빠', 0.6729634404182434), ('목걸이', 0.6512461304664612)]
+```
+
+참고 : Word2vec 모델은 자연어 처리에서 단어를 밀집 벡터로 만들어주는 단어 임베딩 방법론이지만 최근에 들어서는 자연어 처리를 넘어서 추천 시스템에도 사용되고 있는 모델입니다. 우선 적당하게 데이터를 나열해주면 Word2vec은 위치가 근접한 데이터를 유사도가 높은 벡터를 만들어준다는 점에서 착안된 아이디어입니다.
+
+링크 : https://brunch.co.kr/@goodvc78/16?fbclid=IwAR1QZZAeZe_tNWxnxVCRwl8PIouBPAaqSIJ1lBxJ-EKtfDfmLehi1MUV_Lk
+
+## 3. 글로브(GloVe)
+
+글로브(Global Vectors for Word Representation, GloVe)는 카운트 기반과 예측 기반을 모두 사용하는 방법론
+
+기존의 카운트 기반의 LSA(Latent Semantic Analysis)와 예측 기반의 Word2Vec의 단점을 지적하며 이를 보완한다는 목적
+
+### 1) 기존 방법론에 대한 비판
+
+ LSA는 DTM이나 TF-IDF 행렬과 같이 각 문서에서의 각 단어의 빈도수를 카운트 한 행렬이라는 전체적인 통계 정보를 입력으로 받아 차원을 축소(Truncated SVD)하여 잠재된 의미를 끌어내는 방법론이었습니다. LSA는 카운트 기반으로 코퍼스의 전체적인 통계 정보를 고려하기는 하지만, 왕:남자 = 여왕:? (정답은 여자)와 같은 단어 의미의 유추 작업(Analogy task)에는 성능이 떨어집니다. 
+
+Word2Vec는 실제값과 예측값에 대한 오차를 손실 함수를 통해 줄여나가며 학습하는 예측 기반의 방법론이었습니다. Word2Vec는 예측 기반으로 단어 간 유추 작업에는 LSA보다 뛰어나지만, 임베딩 벡터가 윈도우 크기 내에서만 주변 단어를 고려하기 때문에 코퍼스의 전체적인 통계 정보를 반영하지 못합니다.
+
+GloVe는 이러한 기존 방법론들의 각각의 한계를 지적하며, LSA의 메커니즘이었던 카운트 기반의 방법과 Word2Vec의 메커니즘이었던 예측 기반의 방법론 두 가지를 모두 사용합니다.
+
+### 2) 윈도우 기반 동시 등장 행렬(Window based Co-occurrence Matrix)
+
+```
+Ex)
+I like deep learning
+I like NLP
+I enjoy flying
+```
+
+윈도우 크기가 N일 때는 좌, 우에 존재하는 N개의 단어만 참고하게 됩니다. 윈도우 크기가 1일 때, 위의 텍스트를 가지고 구성한 동시 등장 행렬은 다음과 같습니다.
+
+![](https://lh3.googleusercontent.com/UO6MlkUo8xuBlySXlUdVs8og9q2OfxXOB9jAW1eQO4d2WbdTtPtoo6Cj2kIZJv8ip76WMZIwRg7SmFaj1QQl3xqLHPA32Z9MeP87FCKR6DjIU7E3PG-yaXs5o3p112IoFub3S7lT97VmT_Gcp28x7uB0Rp7SNSfhQ6Ex5EVjD1VIyxMvu1eYMbCnF9MfcJODbS54MbgkRoi6jLBPolQqBL3QLCY5tawEzQVRgnAN39d9P56c4VjGyI6akyrjddIfuTJvAmsTrfNEsP_w-V4ObOdRgcZ3GOkMFpVMdJE6mlI96YNoRqVwM-HNd_cCLIpwx451Mka7QJETB-6quT6XZ_vmOlz8u-kEDe_JALMjkFJZaNKKqRrk4b_svMfuvlExF4H7lVYuVL-gg0WdhZzP52XmZb3_g2jlwppSHRAhLpPzxPkEe00PDm7nVCYnH3X1P9p_tgstsmzWEqexTIdg1OqyAlLp7L6uUjBSYa-5pE4nbmwnbAm69pwYc5ao2aEGExZzj-Uqe2wU1EEf_Ta_rJ01UaotIGQvORvzDvj5xqrOgUaEShOEfYSCjN3P46XgYIoOyc8LbBxSktd3jaIWT2kFrpES65ZbeZpq72VCzck-9BAcwbNZoHzRY1RaVUPcnc-GiKUGSs2YxLRE6s94eibvhluikQ0=w770-h443-no)
+
+위 행렬은 행렬을 전치(Transpose)해도 동일한 행렬이 된다는 특징이 있습니다.
+
+위의 테이블은 스탠포드 대학교의 자연어 처리 강의를 참고하였습니다.
+링크 : http://web.stanford.edu/class/cs224n/slides/cs224n-2019-lecture02-wordvecs2.pdf
+
+### 3) 동시 등장 확률(Co-occurrence Probability)
+
+아래의 표는 어떤 동시 등장 행렬을 가지고 정리한 동시 등장 확률(Co-occurrence Probability)을 보여줍니다. 
+
+동시 등장 확률 P(k | i)는 동시 등장 행렬로부터 특정 단어 i의 전체 등장 횟수를 카운트하고, 특정 단어 i가 등장했을 때 어떤 단어 k가 등장한 횟수를 카운트하여 계산한 조건부 확률입니다.
+
+P(k | i)에서 i를 중심 단어(Center Word), k를 주변 단어(Context Word)라고 했을 때, 위에서 배운 동시 등장 행렬에서 중심 단어 i의 행의 모든 값을 더한 값을 분모로 하고 i행 k열의 값을 분자로 한 값이라고 볼 수 있겠습니다.
+
+![](https://lh3.googleusercontent.com/AtE36Yu0nJ5TArvuelb9simvGmSS5gZUHKaAJCdyWQjnTg890jeToHP159oP1xKePmPwDivsj5XvMNo3c_0irw0YMDHoQQ1-tnm_5nhykxXYNpMqTrr8yuH0AK_KNOZ9su4kcIoX_f8Ov8TdO_UC9WYgDOSAsJ899gAuJcRBRvUhgw8pvYM3ypA7UeMuWvVX_zO9BX5hByu2Ohbn3h0uwk1wb_wW1Qlc8Y6zgFDSKhgrV0uVxrwYv1lvia1Qn4pJG0YKK-cuNSAIpdHjURC2yDxv3TKRyjA29NJA39rfZBAM5qB97OrbCzK2KO5mbZmt-sh0uANbv8kHlZJllo4hCpWKdsBGHTf8BDUNteVGKzZIE8E5eF2VXdRG9rz-Gz2Kh2t4E1MgF5npdY0M68PcXXOy0iqkgGjEzuuUGpHTYKPGgKo9bgaD8jZUwmqfPA7CmG80YwoBkoaEON8I83cbuV4C8lnQJUVRL_J9atVwo5O0DRi1XLaBSq-q6WGTMf8jJ3Z7uelwYcap73WspUqaBRolb89FimCD8hIhhrxqNIoxJOtzXIprU-AWmE6v3UWCg-bqlfPstLGippMWGY4JgYPogMuwYDEabrzG6SNpJgcndMGh5xAvIemYdZcVmP1Z626i3qcGqhgxv8-bNE_mkKmzJNvVJCg=w937-h228-no)
+
+보기 쉽도록 조금 단순화해서 표현한 표는 다음과 같습니다.
+
+![](https://lh3.googleusercontent.com/nboPOnytc_7OJsbWkwTPu-3cJFcqoA6wldIHe9fYzuqEdu845PKxKmdP3BaESNhEf28ZZjJVulNb3IIeovEAZxXbB7NXw0o5rdqRZ80iS5qvdRH6go7pLjJJxiraf4Fhylm-CJubUciGCEnfYh8O2S3qAhMTIS8hOEkNcVSN5CXq_Lea6xW8l7B3_7ZsNdLLA3jHvX1lj97wf8sCt9RByuVd0kYUdLiB6jO0qPEepjLpreEiUSgsEfBelmNteawkoYhwdEXzNOjbWUHHIemW8wFqCaWqj8GTA52DTI30Vr-SKmTBU_YbChTRwr04g15t1bcjUjhlUryzpMbOVHGR5Lh93gccO6_iJ9VqnazTcSkYOao92ZIfpHWCgp52CvffYgX7CfqiPcc8K8MJJnt8M1Cd0WpQIdaM2J8EO4PM0iDHazwPakUV-wxiODPV1niXknLLo5bQF5rYswtskFk7bjWkkk399tMtF7lOifUQoWJmZ5jvaBLC2lO23h8ZTcdOItJfnNLyBzPEfrYWy10GeHQnjwcdMAsFgOqQK2JqA9RfB1xFUvtq__jU-MH9MJzpyaoY5xHdf2RN-B21_Est82fJu7qobFxd0AOeu6W8FBE7xaamOBDJfmOvcMpkIfGIFHs1m3_rL-VqRwdcBkMvmlFMWgsknDA=w835-h187-no)
+
+### 4) 손실 함수(Loss function)
+
+각 용어를 정리
+
+- X : 동시 등장 행렬(Co-occurrence Matrix)
+- $X_{ij}$ : 중심 단어 i가 등장했을 때 윈도우 내 주변 단어 j가 등장하는 횟수
+- $X_{i} : \sum_j X_{ij}$ : 동시 등장 행렬에서 i행의 값을 모두 더한 값
+- $P_{ik}$ : $P(k\ |\ i)$ = $\frac{X_{ik}}{X_{i}}$ : 중심 단어 i가 등장했을 때 윈도우 내 주변 단어 k가 등장할 확률
+  - Ex) P(solid l ice) = 단어 ice가 등장했을 때 단어 solid가 등장할 확률
+- $\frac{P_{ik}}{P_{jk}}$ : ${P_{ik}}$를 ${P_{jk}}$로 나눠준 값
+  - Ex) P(solid l ice) / P(solid l steam) = 8.9
+- $w_{i}$ : 중심 단어 i의 임베딩 벡터
+- $\tilde{w_{k}}$ : 주변 단어 k의 임베딩 벡터
+
+GloVe의 아이디어를 한 줄로 요약하면 '임베딩 된 중심 단어와 주변 단어 벡터의 내적이 전체 코퍼스에서의 동시 등장 확률이 되도록 만드는 것'입니다. 즉, 이를 만족하도록 임베딩 벡터를 만드는 것이 목표입니다.
+
+식으로 표현하면 다음과 같습니다.
+
+$dot\ product(w_{i}\ \tilde{w_{k}}) \approx\ P(k\ |\ i) = P_{ik}$
+
+ GloVe는 아래와 같은 관계를 가지도록 임베딩 벡터를 설계합니다.
+
+$dot\ product(w_{i}\ \tilde{w_{k}}) \approx\ log\ P(k\ |\ i) = log\ P_{ik}$
+
+임베딩 벡터들을 만들기 위한 손실 함수를 처음부터 차근차근 설계해보겠습니다
+
+$F(w_{i},\ w_{j},\ \tilde{w_{k}}) = \frac{P_{ik}}{P_{jk}}$
+
+함수 F는 두 단어 사이의 동시 등장 확률의 크기 관계 비(ratio) 정보를 벡터 공간에 인코딩하는 것이 목적입니다. 이를 위해 GloVe 연구진들은 wi와 wj라는 두 벡터의 차이를 함수 F의 입력으로 사용하는 것을 제안합니다.
+
+$F(w_{i} -\ w_{j},\ \tilde{w_{k}}) = \frac{P_{ik}}{P_{jk}}$
+
+그런데 우변은 스칼라값이고 좌변은 벡터값입니다. 이를 성립하기 해주기 위해서 함수 F의 두 입력에 내적(Dot product)을 수행합니다.
+
+$F((w_{i} -\ w_{j})^{T} \tilde{w_{k}}) = \frac{P_{ik}}{P_{jk}}$
+
+정리하면, 선형 공간(Linear space)에서 단어의 의미 관계를 표현하기 위해 뺄셈과 내적을 택했습니다.
+
+여기서 함수 F가 만족해야 할 필수 조건이 있습니다. 중심 단어 w와 주변 단어 $\tilde{w}$라는 선택 기준은 실제로는 무작위 선택이므로 이 둘의 관계는 자유롭게 교환될 수 있도록 해야합니다. 이것이 성립되게 하기 위해서 GloVe 연구진은 함수 F가 실수의 덥셈과 양수의 곱셈에 대해서 준동형(Homomorphism)을 만족하도록 합니다. 생소한 용어라서 말이 어려워보이는데, 정리하면 a와 b에 대해서 함수 F가 F(a+b)가 F(a)F(b)와 같도록 만족시켜야 한다는 의미입니다.
+
+$F(a+b) = F(a)F(b),\ \forall a,\ b\in \mathbb{R}$
+
+a와 b가 각각 사실 두 벡터의 내적값이라고 하면 결과값으로 스칼라 값이 나올 수 있습니다. 그러므로 위의 준동형식을 아래와 같이 바꿔보겠습니다. 여기서 v1, v2, v3, v4는 각각 벡터값입니다. 아래의 V는 벡터를 의미합니다.
+
+$F(v_{1}^{T}v_{2} + v_{3}^{T}v_{4}) = F(v_{1}^{T}v_{2})F(v_{3}^{T}v_{4}),\ \forall v_{1},\ v_{2},\ v_{3},\ v_{4}\in V$
+
+GloVe 식에 바로 적용을 위해 준동형 식을 이를 뺄셈에 대한 준동형식으로 변경합니다. 그렇게 되면 곱셈도 나눗셈으로 바뀝니다.
+
+$F(v_{1}^{T}v_{2} - v_{3}^{T}v_{4}) = \frac{F(v_{1}^{T}v_{2})}{F(v_{3}^{T}v_{4})},\ \forall v_{1},\ v_{2},\ v_{3},\ v_{4}\in V$
+
+이제 이 준동형 식을 GloVe 식에 적용해보겠습니다. 우선, 함수 F의 우변은 다음과 같이 바뀌어야 합니다.
+
+$F((w_{i} -\ w_{j})^{T} \tilde{w_{k}}) = \frac{F(w_{i}^{T}\tilde{w_{k}})}{F(w_{j}^{T}\tilde{w_{k}})}$
+
+결과적으로 다음과 같습니다.
+
+$\frac{P_{ik}}{P_{jk}} = \frac{F(w_{i}^{T}\tilde{w_{k}})}{F(w_{j}^{T}\tilde{w_{k}})}$
+
+, $F(w_{i}^{T}\tilde{w_{k}}) = P_{ik} = \frac{X_{ik}}{X_{i}}$
+
+좌변을 풀어쓰면 다음과 같습니다.
+
+$F(w_{i}^{T}\tilde{w_{k}}\ -\ w_{j}^{T}\tilde{w_{k}}) = \frac{F(w_{i}^{T}\tilde{w_{k}})}{F(w_{j}^{T}\tilde{w_{k}})}$
+
+F를 지수 함수 exp라고 해봅시다.
+
+$exp(w_{i}^{T}\tilde{w_{k}}\ -\ w_{j}^{T}\tilde{w_{k}}) = \frac{exp(w_{i}^{T}\tilde{w_{k}})}{exp(w_{j}^{T}\tilde{w_{k}})}$
+
+$exp(w_{i}^{T}\tilde{w_{k}}) = P_{ik} = \frac{X_{ik}}{X_{i}}$
+
+위의 두번째 식으로부터 다음과 같은 식을 얻을 수 있습니다.
+
+$w_{i}^{T}\tilde{w_{k}} = log\ P_{ik} = log\ (\frac{X_{ik}}{X_{i}}) = log\ X_{ik} - log\ X_{i}$
+
+사실 wi와 $\tilde{w_{k}}$는 두 값의 위치를 서로 바꾸어도 식이 성립해야 합니다. Xik의 정의를 생각해보면 Xki와도 같습니다. 
+
+$w_{i}^{T}\tilde{w_{k}} + b_{i} + \tilde{b_{k}} = log\ X_{ik}$
+
+$Loss\ function = \sum_{m, n=1}^{V}\ (w_{m}^{T}\tilde{w_{n}} + b_{m} + \tilde{b_{n}} - logX_{mn})^{2}$
+
+여기서 V는 단어 집합의 크기를 의미합니다. 
+
+$X_{ik}$ 의 값에 영향을 받는 가중치 함수(Weighting function) $f(X_{ik})$를 손실 함수에 도입합니다.
+
+![](https://wikidocs.net/images/page/22885/%EA%B0%80%EC%A4%91%EC%B9%98.PNG)
+
+이 함수 f(x)의 식은 다음과 같이 정의됩니다.
+
+$f(x) = min(1,\ (x/x_{max})^{3/4})$
+
+최종적으로 다음과 같은 일반화 된 손실 함수를 얻어낼 수 있습니다.
+
+$Loss\ function = \sum_{m, n=1}^{V}\ f(X_{mn})(w_{m}^{T}\tilde{w_{n}} + b_{m} + \tilde{b_{n}} - logX_{mn})^{2}$
+
+## 4. 사전 훈련된 워드 임베딩(Pre-trained Word Embedding)
+
+케라스의 임베딩 층(embedding layer)과 사전 훈련된 워드 임베딩(pre-trained word embedding)을 가져와서 사용하는 것을 비교해봅니다.
+
+위키피디아 등과 같은 방대한 코퍼스를 가지고 Word2vec, FastText, Glove 등을 통해서 이미 사전에 훈련된 임베딩 벡터를 불러오는 방법을 사용하는 경우도 있습니다.
+
+### 1) 케라스 임베딩 층(Keras Embedding layer)
+
+임베딩 층을 사용하기 위해서 입력 시퀀스의 각 입력은 모두 정수 인코딩이 되어있어야 합니다. 즉, 각각의 입력은 전체 데이터에서 유일한 정수로 변환된 상태로 임베딩 층을 지납니다.
+
+어떤 단어 → 단어에 부여된 고유한 정수값(임베딩 층의 입력) → 임베딩 층 통과 → 밀집 벡터(임베딩 층의 출력)
+
+이렇게 되면 단어는 결과적으로 모델이 풀고자하는 문제에 특화된 밀집 벡터가 됩니다. 그리고 이 밀집 벡터를 임베딩 벡터라고 부릅니다.
+
+임베딩 층을 지난다는 것은 각 단어의 임베딩 벡터값이 기록되어져 있으며, 임베딩 층의 입력인 정수를 인덱스로 가지는 테이블로부터 값을 가져오는 룩업 테이블이라고 볼 수 있습니다. 그리고 이 테이블은 단어 집합의 크기만큼의 행을 가지므로 모든 단어는 고유한 임베딩 벡터를 가집니다.
+
+![](https://wikidocs.net/images/page/33793/lookup_table.PNG)
+
+위의 그림은 단어 great이 정수 인코딩 된 후 테이블로부터 해당 인덱스에 위치한 임베딩 벡터를 꺼내오는 모습을 보여줍니다. 위의 그림에서는 임베딩 벡터의 차원이 4로 설정되어져 있습니다. 그리고 단어 great은 정수 인코딩 과정에서 1,918의 정수로 인코딩이 되었고 그에 따라 단어 집합의 크기만큼의 행을 가지는 테이블에서 인덱스 1,918번에 위치한 행을 단어 great의 임베딩 벡터로 사용합니다. 이 임베딩 벡터는 모델의 입력이 되고, 역전파 과정에서 위 테이블의 값. 즉, 임베딩 벡터값 또한 함께 학습이 됩니다.
+
+
+```python
+from keras.layers import Embedding
+# 아래의 각 인자는 저자가 임의로 선정한 숫자들이며 의미있는 선정 기준이 아님.
+v = Embedding(20001, 256, input_length=500)
+# vocab_size = 20001
+# output_dim = 256
+# input_length = 500
+```
+
+- vocab_size<br/>
+: 텍스트 데이터의 전체 단어 집합의 크기입니다. 만약 갖고있는 데이터의 단어들의 인코딩이 0부터 20,000까지 되었다면 단어 집합의 크기는 20,001이 되어야 합니다.
+- output_dim<br/>
+: 임베딩이 되고 난 후의 단어의 차원입니다. 만약, 이 값을 256으로 준다면 모든 단어의 차원이 256이 됩니다.
+- input_length<br/>
+: 입력 시퀀스의 길이입니다. 만약 갖고있는 각 샘플의 길이가 500개의 단어로 구성되어있다면 이 값은 500이 됩니다.
+
+Embedding()은 (number of samples, input_length)인 2D 정수 텐서를 입력받습니다. 이 때 각 sample은 정수 인코딩이 된 결과로, 정수의 시퀀스입니다. Embedding()은 워드 임베딩 작업을 수행하고 (number of samples, input_length, embedding word dimentionality)인 3D 실수 텐서를 리턴합니다.
+
+문장의 긍정, 부정을 판단하는 간단한 감성 분류 모델을 만들어보겠습니다.
+
+
+```python
+sentences = ['멋있어 최고야 짱이야 감탄이다', '헛소리 지껄이네', '닥쳐 자식아', '우와 대단하다', '우수한 성적', '형편없다', '최상의 퀄리티']
+y_train = [1, 0, 0, 1, 1, 0, 1]
+```
+
+문장과 레이블 데이터를 만들었습니다.
+
+
+```python
+from keras.preprocessing.text import Tokenizer
+t = Tokenizer()
+t.fit_on_texts(sentences)
+vocab_size = len(t.word_index) + 1
+
+print(vocab_size)
+```
+
+    16
+    
+
+케라스의 Tokenizer()를 사용하여 토큰화를 시켰습니다.
+
+
+```python
+X_encoded = t.texts_to_sequences(sentences)
+print(X_encoded)
+```
+
+    [[1, 2, 3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13], [14, 15]]
+    
+
+각 문장에 대해서 정수 인코딩을 수행합니다.
+
+
+```python
+max_len=max(len(l) for l in X_encoded)
+print(max_len)
+```
+
+    4
+    
+
+문장 중에서 가장 길이가 긴 문장의 길이는 4입니다.
+
+
+```python
+from keras.preprocessing.sequence import pad_sequences
+X_train=pad_sequences(X_encoded, maxlen=max_len, padding='post')
+print(X_train)
+```
+
+    [[ 1  2  3  4]
+     [ 5  6  0  0]
+     [ 7  8  0  0]
+     [ 9 10  0  0]
+     [11 12  0  0]
+     [13  0  0  0]
+     [14 15  0  0]]
+    
+
+모든 문장을 패딩하여 길이를 4로 만들어주었습니다.
+
+
+```python
+from keras.models import Sequential
+from keras.layers import Dense, Embedding, Flatten
+
+model = Sequential()
+model.add(Embedding(vocab_size, 4, input_length=max_len)) # 모든 임베딩 벡터는 4차원을 가지게됨.
+model.add(Flatten()) # Dense의 입력으로 넣기위함임.
+model.add(Dense(1, activation='sigmoid'))
+```
+
+출력층에 1개의 뉴런에 활성화 함수로는 시그모이드 함수를 사용하여 이진 분류를 수행합니다.
+
+
+```python
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
+model.fit(X_train, y_train, epochs=100, verbose=2)
+```
+
+    Epoch 1/100
+     - 0s - loss: 0.5048 - acc: 1.0000
+    Epoch 2/100
+     - 0s - loss: 0.5029 - acc: 1.0000
+    Epoch 3/100
+     - 0s - loss: 0.5011 - acc: 1.0000
+    Epoch 4/100
+     - 0s - loss: 0.4993 - acc: 1.0000
+    Epoch 5/100
+     - 0s - loss: 0.4974 - acc: 1.0000
+    Epoch 6/100
+     - 0s - loss: 0.4956 - acc: 1.0000
+    Epoch 7/100
+     - 0s - loss: 0.4937 - acc: 1.0000
+    Epoch 8/100
+     - 0s - loss: 0.4919 - acc: 1.0000
+    Epoch 9/100
+     - 0s - loss: 0.4901 - acc: 1.0000
+    Epoch 10/100
+     - 0s - loss: 0.4882 - acc: 1.0000
+    Epoch 11/100
+     - 0s - loss: 0.4864 - acc: 1.0000
+    Epoch 12/100
+     - 0s - loss: 0.4846 - acc: 1.0000
+    Epoch 13/100
+     - 0s - loss: 0.4827 - acc: 1.0000
+    Epoch 14/100
+     - 0s - loss: 0.4809 - acc: 1.0000
+    Epoch 15/100
+     - 0s - loss: 0.4791 - acc: 1.0000
+    Epoch 16/100
+     - 0s - loss: 0.4772 - acc: 1.0000
+    Epoch 17/100
+     - 0s - loss: 0.4754 - acc: 1.0000
+    Epoch 18/100
+     - 0s - loss: 0.4736 - acc: 1.0000
+    Epoch 19/100
+     - 0s - loss: 0.4717 - acc: 1.0000
+    Epoch 20/100
+     - 0s - loss: 0.4699 - acc: 1.0000
+    Epoch 21/100
+     - 0s - loss: 0.4681 - acc: 1.0000
+    Epoch 22/100
+     - 0s - loss: 0.4662 - acc: 1.0000
+    Epoch 23/100
+     - 0s - loss: 0.4644 - acc: 1.0000
+    Epoch 24/100
+     - 0s - loss: 0.4625 - acc: 1.0000
+    Epoch 25/100
+     - 0s - loss: 0.4607 - acc: 1.0000
+    Epoch 26/100
+     - 0s - loss: 0.4589 - acc: 1.0000
+    Epoch 27/100
+     - 0s - loss: 0.4570 - acc: 1.0000
+    Epoch 28/100
+     - 0s - loss: 0.4552 - acc: 1.0000
+    Epoch 29/100
+     - 0s - loss: 0.4534 - acc: 1.0000
+    Epoch 30/100
+     - 0s - loss: 0.4515 - acc: 1.0000
+    Epoch 31/100
+     - 0s - loss: 0.4497 - acc: 1.0000
+    Epoch 32/100
+     - 0s - loss: 0.4479 - acc: 1.0000
+    Epoch 33/100
+     - 0s - loss: 0.4461 - acc: 1.0000
+    Epoch 34/100
+     - 0s - loss: 0.4442 - acc: 1.0000
+    Epoch 35/100
+     - 0s - loss: 0.4424 - acc: 1.0000
+    Epoch 36/100
+     - 0s - loss: 0.4406 - acc: 1.0000
+    Epoch 37/100
+     - 0s - loss: 0.4387 - acc: 1.0000
+    Epoch 38/100
+     - 0s - loss: 0.4369 - acc: 1.0000
+    Epoch 39/100
+     - 0s - loss: 0.4351 - acc: 1.0000
+    Epoch 40/100
+     - 0s - loss: 0.4333 - acc: 1.0000
+    Epoch 41/100
+     - 0s - loss: 0.4315 - acc: 1.0000
+    Epoch 42/100
+     - 0s - loss: 0.4296 - acc: 1.0000
+    Epoch 43/100
+     - 0s - loss: 0.4278 - acc: 1.0000
+    Epoch 44/100
+     - 0s - loss: 0.4260 - acc: 1.0000
+    Epoch 45/100
+     - 0s - loss: 0.4242 - acc: 1.0000
+    Epoch 46/100
+     - 0s - loss: 0.4224 - acc: 1.0000
+    Epoch 47/100
+     - 0s - loss: 0.4206 - acc: 1.0000
+    Epoch 48/100
+     - 0s - loss: 0.4187 - acc: 1.0000
+    Epoch 49/100
+     - 0s - loss: 0.4169 - acc: 1.0000
+    Epoch 50/100
+     - 0s - loss: 0.4151 - acc: 1.0000
+    Epoch 51/100
+     - 0s - loss: 0.4133 - acc: 1.0000
+    Epoch 52/100
+     - 0s - loss: 0.4115 - acc: 1.0000
+    Epoch 53/100
+     - 0s - loss: 0.4097 - acc: 1.0000
+    Epoch 54/100
+     - 0s - loss: 0.4079 - acc: 1.0000
+    Epoch 55/100
+     - 0s - loss: 0.4061 - acc: 1.0000
+    Epoch 56/100
+     - 0s - loss: 0.4043 - acc: 1.0000
+    Epoch 57/100
+     - 0s - loss: 0.4025 - acc: 1.0000
+    Epoch 58/100
+     - 0s - loss: 0.4007 - acc: 1.0000
+    Epoch 59/100
+     - 0s - loss: 0.3989 - acc: 1.0000
+    Epoch 60/100
+     - 0s - loss: 0.3972 - acc: 1.0000
+    Epoch 61/100
+     - 0s - loss: 0.3954 - acc: 1.0000
+    Epoch 62/100
+     - 0s - loss: 0.3936 - acc: 1.0000
+    Epoch 63/100
+     - 0s - loss: 0.3918 - acc: 1.0000
+    Epoch 64/100
+     - 0s - loss: 0.3900 - acc: 1.0000
+    Epoch 65/100
+     - 0s - loss: 0.3883 - acc: 1.0000
+    Epoch 66/100
+     - 0s - loss: 0.3865 - acc: 1.0000
+    Epoch 67/100
+     - 0s - loss: 0.3847 - acc: 1.0000
+    Epoch 68/100
+     - 0s - loss: 0.3829 - acc: 1.0000
+    Epoch 69/100
+     - 0s - loss: 0.3812 - acc: 1.0000
+    Epoch 70/100
+     - 0s - loss: 0.3794 - acc: 1.0000
+    Epoch 71/100
+     - 0s - loss: 0.3777 - acc: 1.0000
+    Epoch 72/100
+     - 0s - loss: 0.3759 - acc: 1.0000
+    Epoch 73/100
+     - 0s - loss: 0.3742 - acc: 1.0000
+    Epoch 74/100
+     - 0s - loss: 0.3724 - acc: 1.0000
+    Epoch 75/100
+     - 0s - loss: 0.3707 - acc: 1.0000
+    Epoch 76/100
+     - 0s - loss: 0.3689 - acc: 1.0000
+    Epoch 77/100
+     - 0s - loss: 0.3672 - acc: 1.0000
+    Epoch 78/100
+     - 0s - loss: 0.3654 - acc: 1.0000
+    Epoch 79/100
+     - 0s - loss: 0.3637 - acc: 1.0000
+    Epoch 80/100
+     - 0s - loss: 0.3620 - acc: 1.0000
+    Epoch 81/100
+     - 0s - loss: 0.3602 - acc: 1.0000
+    Epoch 82/100
+     - 0s - loss: 0.3585 - acc: 1.0000
+    Epoch 83/100
+     - 0s - loss: 0.3568 - acc: 1.0000
+    Epoch 84/100
+     - 0s - loss: 0.3551 - acc: 1.0000
+    Epoch 85/100
+     - 0s - loss: 0.3534 - acc: 1.0000
+    Epoch 86/100
+     - 0s - loss: 0.3517 - acc: 1.0000
+    Epoch 87/100
+     - 0s - loss: 0.3500 - acc: 1.0000
+    Epoch 88/100
+     - 0s - loss: 0.3483 - acc: 1.0000
+    Epoch 89/100
+     - 0s - loss: 0.3466 - acc: 1.0000
+    Epoch 90/100
+     - 0s - loss: 0.3449 - acc: 1.0000
+    Epoch 91/100
+     - 0s - loss: 0.3432 - acc: 1.0000
+    Epoch 92/100
+     - 0s - loss: 0.3415 - acc: 1.0000
+    Epoch 93/100
+     - 0s - loss: 0.3398 - acc: 1.0000
+    Epoch 94/100
+     - 0s - loss: 0.3381 - acc: 1.0000
+    Epoch 95/100
+     - 0s - loss: 0.3365 - acc: 1.0000
+    Epoch 96/100
+     - 0s - loss: 0.3348 - acc: 1.0000
+    Epoch 97/100
+     - 0s - loss: 0.3331 - acc: 1.0000
+    Epoch 98/100
+     - 0s - loss: 0.3315 - acc: 1.0000
+    Epoch 99/100
+     - 0s - loss: 0.3298 - acc: 1.0000
+    Epoch 100/100
+     - 0s - loss: 0.3282 - acc: 1.0000
+    
+
+
+
+
+    <keras.callbacks.History at 0x234459d92b0>
+
+
+
+100%의 정확도를 얻었습니다. 좀 더 복잡한 모델에서 케라스의 Embedding()이 사용되는 사례는 뒤의 텍스트 분류 챕터나 태깅 작업 챕터에서 확인할 수 있습니다.
+
+### 2) 사전 훈련된 글로브 임베딩(Pre-Trained GloVe Embedding) 사용하기
+
+임베딩 벡터를 얻기 위해서 케라스의 Embedding()을 사용하기도 하지만, 때로는 이미 훈련되어져 있는 워드 임베딩을 불러서 이를 임베딩 벡터로 사용하기도 합니다.
+
+ 훈련 데이터로 이미 Word2Vec이나 GloVe 등으로 학습되어져 있는 임베딩 벡터들을 사용하는 것이 성능의 개선을 가져올 수 있습니다.
+
+ GloVe를 불러와보도록 하겠습니다.
+
+다운로드 링크 : http://nlp.stanford.edu/data/glove.6B.zip
+
+
+```python
+sentences = ['nice great best amazing', 'stop lies', 'pitiful nerd', 'excellent work', 'supreme quality', 'bad', 'highly respectable']
+y_train = [1, 0, 0, 1, 1, 0, 1]
+
+from keras.preprocessing.text import Tokenizer
+t = Tokenizer()
+t.fit_on_texts(sentences)
+vocab_size = len(t.word_index) + 1
+
+X_encoded = t.texts_to_sequences(sentences)
+max_len=max(len(l) for l in X_encoded)
+
+from keras.preprocessing.sequence import pad_sequences
+X_train=pad_sequences(X_encoded, maxlen=max_len, padding='post')
+print(X_train)
+```
+
+    [[ 1  2  3  4]
+     [ 5  6  0  0]
+     [ 7  8  0  0]
+     [ 9 10  0  0]
+     [11 12  0  0]
+     [13  0  0  0]
+     [14 15  0  0]]
+    
+
+
+```python
+print(y_train)
+```
+
+    [1, 0, 0, 1, 1, 0, 1]
+    
+
+glove.6B.zip의 압축을 풀면 그 안에 4개의 파일이 있는데 여기서 사용할 파일은 glove.6B.100d.txt 파일입니다. 
+
+
+```python
+n=0
+f = open('glove.6B.100d.txt', encoding="utf8")
+# 예를 들어 윈도우 바탕화면에서 실습한 저자의 경우
+# f = open(r'C:\Users\USER\Desktop\glove.6B.100d.txt', encoding="utf8") 였습니다.
+for line in f:
+    word_vector = line.split() # 각 줄을 읽어와서 word_vector에 저장.
+    print(word_vector) # 각 줄을 출력
+    word = word_vector[0] # word_vector에서 첫번째 값만 저장
+    print(word) # word_vector의 첫번째 값만 출력
+    n=n+1
+    if n==2:
+        break
+f.close()
+```
+
+    ['the', '-0.038194', '-0.24487', '0.72812', '-0.39961', '0.083172', '0.043953', '-0.39141', '0.3344', '-0.57545', '0.087459', '0.28787', '-0.06731', '0.30906', '-0.26384', '-0.13231', '-0.20757', '0.33395', '-0.33848', '-0.31743', '-0.48336', '0.1464', '-0.37304', '0.34577', '0.052041', '0.44946', '-0.46971', '0.02628', '-0.54155', '-0.15518', '-0.14107', '-0.039722', '0.28277', '0.14393', '0.23464', '-0.31021', '0.086173', '0.20397', '0.52624', '0.17164', '-0.082378', '-0.71787', '-0.41531', '0.20335', '-0.12763', '0.41367', '0.55187', '0.57908', '-0.33477', '-0.36559', '-0.54857', '-0.062892', '0.26584', '0.30205', '0.99775', '-0.80481', '-3.0243', '0.01254', '-0.36942', '2.2167', '0.72201', '-0.24978', '0.92136', '0.034514', '0.46745', '1.1079', '-0.19358', '-0.074575', '0.23353', '-0.052062', '-0.22044', '0.057162', '-0.15806', '-0.30798', '-0.41625', '0.37972', '0.15006', '-0.53212', '-0.2055', '-1.2526', '0.071624', '0.70565', '0.49744', '-0.42063', '0.26148', '-1.538', '-0.30223', '-0.073438', '-0.28312', '0.37104', '-0.25217', '0.016215', '-0.017099', '-0.38984', '0.87424', '-0.72569', '-0.51058', '-0.52028', '-0.1459', '0.8278', '0.27062']
+    the
+    [',', '-0.10767', '0.11053', '0.59812', '-0.54361', '0.67396', '0.10663', '0.038867', '0.35481', '0.06351', '-0.094189', '0.15786', '-0.81665', '0.14172', '0.21939', '0.58505', '-0.52158', '0.22783', '-0.16642', '-0.68228', '0.3587', '0.42568', '0.19021', '0.91963', '0.57555', '0.46185', '0.42363', '-0.095399', '-0.42749', '-0.16567', '-0.056842', '-0.29595', '0.26037', '-0.26606', '-0.070404', '-0.27662', '0.15821', '0.69825', '0.43081', '0.27952', '-0.45437', '-0.33801', '-0.58184', '0.22364', '-0.5778', '-0.26862', '-0.20425', '0.56394', '-0.58524', '-0.14365', '-0.64218', '0.0054697', '-0.35248', '0.16162', '1.1796', '-0.47674', '-2.7553', '-0.1321', '-0.047729', '1.0655', '1.1034', '-0.2208', '0.18669', '0.13177', '0.15117', '0.7131', '-0.35215', '0.91348', '0.61783', '0.70992', '0.23955', '-0.14571', '-0.37859', '-0.045959', '-0.47368', '0.2385', '0.20536', '-0.18996', '0.32507', '-1.1112', '-0.36341', '0.98679', '-0.084776', '-0.54008', '0.11726', '-1.0194', '-0.24424', '0.12771', '0.013884', '0.080374', '-0.35414', '0.34951', '-0.7226', '0.37549', '0.4441', '-0.99059', '0.61214', '-0.35111', '-0.83155', '0.45293', '0.082577']
+    ,
+    
+
+
+```python
+print(type(word_vector))
+print(len(word_vector))
+```
+
+    <class 'list'>
+    101
+    
+
+101개의 값 중에서 첫번째 값은 임베딩 벡터가 의미하는 단어를 의미하며, 두번째 값부터 마지막 값은 해당 단어의 임베딩 벡터의 100개의 차원에서의 각 값을 의미합니다. 
+
+즉, glove.6B.100d.txt는 수많은 단어에 대해서 100개의 차원을 가지는 임베딩 벡터로 제공하고 있습니다. 
+
+위의 출력 결과는 단어 'the'에 대해서 100개의 차원을 가지는 임베딩 벡터와 단어 ','에 대해서 100개의 차원을 가지는 임베딩 벡터를 보여줍니다. 
+
+glove.6B.100d.txt에 있는 모든 임베딩 벡터들을 불러와보겠습니다. 형식은 키(key)와 값(value)의 쌍(pair)를 가지는 파이썬의 사전형 구조를 사용합니다.
+
+
+```python
+import numpy as np
+embedding_dict = dict()
+f = open('glove.6B.100d.txt', encoding="utf8")
+# 예를 들어 윈도우 바탕화면에서 실습한 저자의 경우
+# f = open(r'C:\Users\USER\Desktop\glove.6B.100d.txt', encoding="utf8") 였습니다.
+for line in f:
+    word_vector = line.split()
+    word = word_vector[0]
+    word_vector_arr = np.asarray(word_vector[1:], dtype='float32') # 100개의 값을 가지는 array로 변환
+    embedding_dict[word] = word_vector_arr
+f.close()
+print('%s개의 Embedding vector가 있습니다.' % len(embedding_dict))
+```
+
+    400000개의 Embedding vector가 있습니다.
+    
+
+임의의 단어 'respectable'에 대해서 임베딩 벡터를 출력해봅니다.
+
+
+```python
+print(embedding_dict['respectable'])
+print(len(embedding_dict['respectable']))
+```
+
+    [-0.049773   0.19903    0.10585    0.1391    -0.32395    0.44053
+      0.3947    -0.22805   -0.25793    0.49768    0.15384   -0.08831
+      0.0782    -0.8299    -0.037788   0.16772   -0.45197   -0.17085
+      0.74756    0.98256    0.81872    0.28507    0.16178   -0.48626
+     -0.006265  -0.92469   -0.30625   -0.067318  -0.046762  -0.76291
+     -0.0025264 -0.018795   0.12882   -0.52457    0.3586     0.43119
+     -0.89477   -0.057421  -0.53724    0.25587    0.55195    0.44698
+     -0.24252    0.29946    0.25776   -0.8717     0.68426   -0.05688
+     -0.1848    -0.59352   -0.11227   -0.57692   -0.013593   0.18488
+     -0.32507   -0.90171    0.17672    0.075601   0.54896   -0.21488
+     -0.54018   -0.45882   -0.79536    0.26331    0.18879   -0.16363
+      0.3975     0.1099     0.1164    -0.083499   0.50159    0.35802
+      0.25677    0.088546   0.42108    0.28674   -0.71285   -0.82915
+      0.15297   -0.82712    0.022112   1.067     -0.31776    0.1211
+     -0.069755  -0.61327    0.27308   -0.42638   -0.085084  -0.17694
+     -0.0090944  0.1109     0.62543   -0.23682   -0.44928   -0.3667
+     -0.21616   -0.19187   -0.032502   0.38025  ]
+    100
+    
+
+벡터값이 출력되며 길이는 100인 것을 확인할 수 있습니다.
+
+
+```python
+embedding_matrix = np.zeros((vocab_size, 100))
+# 단어 집합 크기의 행과 100개의 열을 가지는 행렬 생성. 값은 전부 0으로 채워진다.
+np.shape(embedding_matrix)
+```
+
+
+
+
+    (16, 100)
+
+
+
+
+```python
+print(t.word_index.items())
+```
+
+    dict_items([('nice', 1), ('great', 2), ('best', 3), ('amazing', 4), ('stop', 5), ('lies', 6), ('pitiful', 7), ('nerd', 8), ('excellent', 9), ('work', 10), ('supreme', 11), ('quality', 12), ('bad', 13), ('highly', 14), ('respectable', 15)])
+    
+
+
+```python
+for word, i in t.word_index.items(): # 훈련 데이터의 단어 집합에서 단어를 1개씩 꺼내온다.
+    temp = embedding_dict.get(word) # 단어(key) 해당되는 임베딩 벡터의 100개의 값(value)를 임시 변수에 저장
+    if temp is not None:
+        embedding_matrix[i] = temp # 임수 변수의 값을 단어와 맵핑되는 인덱스의 행에 삽입
+```
+
+이제 훈련 데이터의 단어 집합의 모든 단어에 대해서 사전 훈련된 GloVe의 임베딩 벡터들을 맵핑하였습니다. 이제 이를 이용하여 임베딩 층(embedding layer)를 만들어보겠습니다.
+
+
+```python
+from keras.models import Sequential
+from keras.layers import Dense, Embedding, Flatten
+
+model = Sequential()
+e = Embedding(vocab_size, 100, weights=[embedding_matrix], input_length=max_len, trainable=False)
+```
+
+현재 실습에서 사전 훈련된 워드 임베딩을 100차원의 값인 것으로 사용하고 있기 때문에 임베딩 층의 output_dim의 인자값으로 100을 주어야 합니다. 그리고 사전 훈련된 워드 임베딩을 그대로 사용할 것이므로, 별도로 더 이상 훈련을 하지 않는다는 옵션을 줍니다. 이는 trainable=False로 선택할 수 있습니다.
+
+
+```python
+model.add(e)
+model.add(Flatten())
+model.add(Dense(1, activation='sigmoid'))
+```
+
+
+```python
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
+model.fit(X_train, y_train, epochs=100, verbose=2)
+```
+
+    Epoch 1/100
+     - 0s - loss: 0.5900 - acc: 0.8571
+    Epoch 2/100
+     - 0s - loss: 0.5717 - acc: 0.8571
+    Epoch 3/100
+     - 0s - loss: 0.5542 - acc: 0.8571
+    Epoch 4/100
+     - 0s - loss: 0.5374 - acc: 0.8571
+    Epoch 5/100
+     - 0s - loss: 0.5214 - acc: 0.8571
+    Epoch 6/100
+     - 0s - loss: 0.5061 - acc: 0.8571
+    Epoch 7/100
+     - 0s - loss: 0.4914 - acc: 0.8571
+    Epoch 8/100
+     - 0s - loss: 0.4774 - acc: 0.8571
+    Epoch 9/100
+     - 0s - loss: 0.4639 - acc: 0.8571
+    Epoch 10/100
+     - 0s - loss: 0.4510 - acc: 0.8571
+    Epoch 11/100
+     - 0s - loss: 0.4386 - acc: 0.8571
+    Epoch 12/100
+     - 0s - loss: 0.4266 - acc: 0.8571
+    Epoch 13/100
+     - 0s - loss: 0.4152 - acc: 1.0000
+    Epoch 14/100
+     - 0s - loss: 0.4041 - acc: 1.0000
+    Epoch 15/100
+     - 0s - loss: 0.3935 - acc: 1.0000
+    Epoch 16/100
+     - 0s - loss: 0.3832 - acc: 1.0000
+    Epoch 17/100
+     - 0s - loss: 0.3733 - acc: 1.0000
+    Epoch 18/100
+     - 0s - loss: 0.3637 - acc: 1.0000
+    Epoch 19/100
+     - 0s - loss: 0.3544 - acc: 1.0000
+    Epoch 20/100
+     - 0s - loss: 0.3454 - acc: 1.0000
+    Epoch 21/100
+     - 0s - loss: 0.3368 - acc: 1.0000
+    Epoch 22/100
+     - 0s - loss: 0.3284 - acc: 1.0000
+    Epoch 23/100
+     - 0s - loss: 0.3203 - acc: 1.0000
+    Epoch 24/100
+     - 0s - loss: 0.3124 - acc: 1.0000
+    Epoch 25/100
+     - 0s - loss: 0.3048 - acc: 1.0000
+    Epoch 26/100
+     - 0s - loss: 0.2974 - acc: 1.0000
+    Epoch 27/100
+     - 0s - loss: 0.2903 - acc: 1.0000
+    Epoch 28/100
+     - 0s - loss: 0.2834 - acc: 1.0000
+    Epoch 29/100
+     - 0s - loss: 0.2767 - acc: 1.0000
+    Epoch 30/100
+     - 0s - loss: 0.2702 - acc: 1.0000
+    Epoch 31/100
+     - 0s - loss: 0.2639 - acc: 1.0000
+    Epoch 32/100
+     - 0s - loss: 0.2578 - acc: 1.0000
+    Epoch 33/100
+     - 0s - loss: 0.2519 - acc: 1.0000
+    Epoch 34/100
+     - 0s - loss: 0.2462 - acc: 1.0000
+    Epoch 35/100
+     - 0s - loss: 0.2407 - acc: 1.0000
+    Epoch 36/100
+     - 0s - loss: 0.2353 - acc: 1.0000
+    Epoch 37/100
+     - 0s - loss: 0.2301 - acc: 1.0000
+    Epoch 38/100
+     - 0s - loss: 0.2251 - acc: 1.0000
+    Epoch 39/100
+     - 0s - loss: 0.2202 - acc: 1.0000
+    Epoch 40/100
+     - 0s - loss: 0.2155 - acc: 1.0000
+    Epoch 41/100
+     - 0s - loss: 0.2109 - acc: 1.0000
+    Epoch 42/100
+     - 0s - loss: 0.2065 - acc: 1.0000
+    Epoch 43/100
+     - 0s - loss: 0.2022 - acc: 1.0000
+    Epoch 44/100
+     - 0s - loss: 0.1980 - acc: 1.0000
+    Epoch 45/100
+     - 0s - loss: 0.1940 - acc: 1.0000
+    Epoch 46/100
+     - 0s - loss: 0.1901 - acc: 1.0000
+    Epoch 47/100
+     - 0s - loss: 0.1862 - acc: 1.0000
+    Epoch 48/100
+     - 0s - loss: 0.1826 - acc: 1.0000
+    Epoch 49/100
+     - 0s - loss: 0.1790 - acc: 1.0000
+    Epoch 50/100
+     - 0s - loss: 0.1755 - acc: 1.0000
+    Epoch 51/100
+     - 0s - loss: 0.1721 - acc: 1.0000
+    Epoch 52/100
+     - 0s - loss: 0.1688 - acc: 1.0000
+    Epoch 53/100
+     - 0s - loss: 0.1656 - acc: 1.0000
+    Epoch 54/100
+     - 0s - loss: 0.1625 - acc: 1.0000
+    Epoch 55/100
+     - 0s - loss: 0.1595 - acc: 1.0000
+    Epoch 56/100
+     - 0s - loss: 0.1566 - acc: 1.0000
+    Epoch 57/100
+     - 0s - loss: 0.1538 - acc: 1.0000
+    Epoch 58/100
+     - 0s - loss: 0.1510 - acc: 1.0000
+    Epoch 59/100
+     - 0s - loss: 0.1483 - acc: 1.0000
+    Epoch 60/100
+     - 0s - loss: 0.1457 - acc: 1.0000
+    Epoch 61/100
+     - 0s - loss: 0.1432 - acc: 1.0000
+    Epoch 62/100
+     - 0s - loss: 0.1407 - acc: 1.0000
+    Epoch 63/100
+     - 0s - loss: 0.1383 - acc: 1.0000
+    Epoch 64/100
+     - 0s - loss: 0.1359 - acc: 1.0000
+    Epoch 65/100
+     - 0s - loss: 0.1337 - acc: 1.0000
+    Epoch 66/100
+     - 0s - loss: 0.1314 - acc: 1.0000
+    Epoch 67/100
+     - 0s - loss: 0.1293 - acc: 1.0000
+    Epoch 68/100
+     - 0s - loss: 0.1272 - acc: 1.0000
+    Epoch 69/100
+     - 0s - loss: 0.1251 - acc: 1.0000
+    Epoch 70/100
+     - 0s - loss: 0.1231 - acc: 1.0000
+    Epoch 71/100
+     - 0s - loss: 0.1212 - acc: 1.0000
+    Epoch 72/100
+     - 0s - loss: 0.1193 - acc: 1.0000
+    Epoch 73/100
+     - 0s - loss: 0.1174 - acc: 1.0000
+    Epoch 74/100
+     - 0s - loss: 0.1156 - acc: 1.0000
+    Epoch 75/100
+     - 0s - loss: 0.1138 - acc: 1.0000
+    Epoch 76/100
+     - 0s - loss: 0.1121 - acc: 1.0000
+    Epoch 77/100
+     - 0s - loss: 0.1104 - acc: 1.0000
+    Epoch 78/100
+     - 0s - loss: 0.1088 - acc: 1.0000
+    Epoch 79/100
+     - 0s - loss: 0.1072 - acc: 1.0000
+    Epoch 80/100
+     - 0s - loss: 0.1056 - acc: 1.0000
+    Epoch 81/100
+     - 0s - loss: 0.1041 - acc: 1.0000
+    Epoch 82/100
+     - 0s - loss: 0.1026 - acc: 1.0000
+    Epoch 83/100
+     - 0s - loss: 0.1011 - acc: 1.0000
+    Epoch 84/100
+     - 0s - loss: 0.0997 - acc: 1.0000
+    Epoch 85/100
+     - 0s - loss: 0.0983 - acc: 1.0000
+    Epoch 86/100
+     - 0s - loss: 0.0970 - acc: 1.0000
+    Epoch 87/100
+     - 0s - loss: 0.0956 - acc: 1.0000
+    Epoch 88/100
+     - 0s - loss: 0.0943 - acc: 1.0000
+    Epoch 89/100
+     - 0s - loss: 0.0931 - acc: 1.0000
+    Epoch 90/100
+     - 0s - loss: 0.0918 - acc: 1.0000
+    Epoch 91/100
+     - 0s - loss: 0.0906 - acc: 1.0000
+    Epoch 92/100
+     - 0s - loss: 0.0894 - acc: 1.0000
+    Epoch 93/100
+     - 0s - loss: 0.0882 - acc: 1.0000
+    Epoch 94/100
+     - 0s - loss: 0.0871 - acc: 1.0000
+    Epoch 95/100
+     - 0s - loss: 0.0860 - acc: 1.0000
+    Epoch 96/100
+     - 0s - loss: 0.0849 - acc: 1.0000
+    Epoch 97/100
+     - 0s - loss: 0.0838 - acc: 1.0000
+    Epoch 98/100
+     - 0s - loss: 0.0828 - acc: 1.0000
+    Epoch 99/100
+     - 0s - loss: 0.0817 - acc: 1.0000
+    Epoch 100/100
+     - 0s - loss: 0.0807 - acc: 1.0000
+    
+
+
+
+
+    <keras.callbacks.History at 0x235110e0438>
+
+
+
+사전 훈련된 GloVe 임베딩에 대한 예제는 아래의 케라스 블로그 링크에도 기재되어 있습니다.<br/>
+링크 : https://blog.keras.io/using-pre-trained-word-embeddings-in-a-keras-model.html
+
+## 5. 엘모(Embeddings from Language Model, ELMo)
+
+논문 링크 : https://aclweb.org/anthology/N18-1202
+
+ELMo(Embeddings from Language Model)는 2018년에 제안된 새로운 워드 임베딩 방법론입니다. ELMo의 가장 큰 특징은 사전 훈련된 언어 모델(Pre-trained language model)을 사용한다는 점입니다.
+
+### 1) ELMo(Embeddings from Language Model)
+
+Bank라는 단어를 생각해봅시다. Bank Account(은행 계좌)와 River Bank(강둑)에서의 Bank는 전혀 다른 의미를 가지는데, Word2Vec이나 Glove 등으로 표현된 임베딩 벡터들은 이를 제대로 반영하지 못한다는 단점이 있습니다. 예를 들어서 Word2Vec이나 Glove 등의 임베딩 방법론으로 Bank란 단어를 [0.2 0.8 -1.2]라는 임베딩 벡터로 임베딩하였다고 하면, 이 단어는 Bank Account(은행 계좌)와 River Bank(강둑)에서의 Bank는 전혀 다른 의미임에도 불구하고 두 가지 상황 모두에서 [0.2 0.8 -1.2]의 벡터가 사용됩니다.
+
+단어를 임베딩하기 전에 전체 문장을 고려해서 임베딩을 하겠다는 것이죠. 그래서 탄생한 것이 문맥을 반영한 워드 임베딩(Contextualized Word Embedding)입니다.
+
+### 2) biLM(Bidirectional Language Model)의 사전 훈련
+
+은닉층이 2개인 일반적인 단방향 RNN 언어 모델의 언어 모델링을 보여줍니다.
+
+![](https://wikidocs.net/images/page/33930/deepbilm.PNG)
+
+RNN 언어 모델은 문장으로부터 단어 단위로 입력을 받는데, RNN 내부의 은닉 상태 ht는 시점(time-step)이 지날수록 점점 업데이트되갑니다. 이는 결과적으로 ht의 값이 문장의 문맥 정보를 점차적으로 반영한다고 말할 수 있습니다. 지금 설명하는 내용은 새로운 개념이 아니라 RNN의 기본 개념입니다.
+
+ELMo는 위의 그림의 순방향 RNN 뿐만 아니라, 위의 그림과는 반대 방향으로 문장을 스캔하는 역방향 RNN 또한 활용합니다. ELMo는 양쪽 방향의 언어 모델을 둘 다 활용한다고하여 이 언어 모델을 biLM(Bidirectional Language Model)이라고 합니다.
+
+ELMo에서 말하는 biLM은 기본적으로 다층 구조(Multi-layer)를 전제로 합니다. 은닉층이 최소 2개 이상이라는 의미입니다.
+
+아래의 그림은 은닉층이 2개인 순방향 언어 모델과 역방향 언어 모델의 모습을 보여줍니다.
+
+![](https://wikidocs.net/images/page/33930/forwardbackwordlm2.PNG)
+
+이때 biLM의 입력이 되는 워드 임베딩 방법으로는 이 책에서는 다루지 않은 char CNN이라는 방법을 사용합니다. 이 임베딩 방법은 글자(character) 단위로 계산되는데, 이렇게 하면 마치 서브단어(subword)의 정보를 참고하는 것처럼 문맥과 상관없이 dog란 단어와 doggy란 단어의 연관성을 찾아낼 수 있습니다. 또한 이 방법은 OOV에도 견고한다는 장점이 있습니다.
+
+RNN 챕터에서 설명한 양방향 RNN과 ELMo에서의 biLM은 다소 다릅니다. 양방향 RNN은 순방향 RNN의 은닉 상태와 역방향의 RNN의 은닉 상태를 다음 층의 입력으로 보내기 전에 연결(concatenate)시킵니다. 
+
+하지만 ElMo는, biLM의 순방향 언어모델과 역방향 언어모델이 각각의 은닉 상태만을 다음 은닉층으로 보내며 훈련시킨 후에 ELMo 표현으로 사용하기 위해서 은닉 상태를 연결(concatenate)시키는 것과는 다릅니다. biLM의 두 언어 모델이 공유하는 층은 오직 입력을 받는 임베딩층과 소프트맥스 함수를 통해 다음 단어를 예측하는 출력층입니다.
+
+### 3) biLM의 활용
+
+biLM이 훈련되었다면, 이제 ELMo가 사전 훈련된 biLM을 통해 입력 문장으로부터 단어를 임베딩하기 위한 과정을 보겠습니다.
+
+![](https://wikidocs.net/images/page/33930/playwordvector.PNG)
+
+play라는 단어를 임베딩 하기위해서 ELMo는 위의 점선의 사각형 내부의 각 층의 결과값을 재료로 사용합니다. 다시 말해 해당 시점(time-step)의 BiLM의 각 층의 출력값을 가져옵니다. 그리고 순방향 언어 모델과 역방향 언어 모델의 각 층의 출력값을 연결(concatenate)하고 추가 작업을 진행합니다.
+
+각 층의 출력값이란 첫번째는 임베딩 층을 말하며, 나머지 층은 각 층의 은닉 상태를 말합니다. 
+
+ELMo의 직관적인 아이디어는 각 층의 출력값이 가진 정보는 전부 서로 다른 종류의 정보를 갖고 있을 것이므로, 이들을 모두 활용한다는 점에 있습니다. 
+
+아래는 ELMo가 임베딩 벡터를 얻는 과정을 보여줍니다.
+
+#### (1) 각 층의 출력값을 연결(concatenate)한다.
+
+![](https://wikidocs.net/images/page/33930/concatenate.PNG)
+
+#### (2) 각 층의 출력값 별로 가중치를 준다.)
+
+![](https://wikidocs.net/images/page/33930/weight.PNG)
+
+이 가중치를 여기서는 s1, s2, s3라고 합시다.
+
+#### (3) 각 층의 출력값을 모두 더한다.
+
+![](https://wikidocs.net/images/page/33930/weightedsum.PNG)
+
+2)번과 3)번의 단계를 요약하여 가중합(Weighted Sum)을 한다고 할 수 있습니다.
+
+#### (4) 벡터의 크기를 결정하는 스칼라 매개변수를 곱한다.
+
+![](https://wikidocs.net/images/page/33930/scalarparameter.PNG)
+
+이 스칼라 매개변수를 여기서는 γ이라고 합시다.
+
+이렇게 완성된 벡터를 ELMo 표현(representation)이라고 합니다. 
+
+ELMo 표현은 그 자체만으로 사용한다기 보다는 기존의 임베딩 벡터와 함께 사용할 수 있습니다.
+
+![](https://wikidocs.net/images/page/33930/elmorepresentation.PNG)
+
+위의 그림은 ELMo 표현이 기존의 Glove 등과 같은 임베딩 벡터와 함께 NLP 태스크의 입력이 되는 것을 보여줍니다. 그리고 이 때, ELMo 표현을 만드는데 사용되는 사전 훈련된 언어 모델의 가중치는 고정시킵니다. 그리고 대신 위에서 사용한 s1, s2, s3와 γ는 훈련 과정에서 학습됩니다.
+
+### 4) ELMo 표현을 사용해서 스팸 메일 분류하기
+
+텐서플로우 허브로부터 다양한 사전 훈련된 모델(Pre-tained Model)들을 사용할 수 있습니다. 여기서는 사전 훈련된 모델로부터 ELMo 표현을 사용해보는 정도로 예제를 진행해보겠습니다. 
+
+시작 전에 텐서플로우 허브를 인스톨 해야합니다.
+
+
+```python
+#pip install tensorflow-hub
+```
+
+
+```python
+import tensorflow_hub as hub
+import tensorflow as tf
+from keras import backend as K
+
+sess = tf.Session()
+K.set_session(sess)
+# 세션 초기화. 이는 텐서플로우 개념.
+
+elmo = hub.Module("https://tfhub.dev/google/elmo/1", trainable=True)
+# 텐서플로우 허브로부터 ELMo를 다운로드
+
+sess.run(tf.global_variables_initializer())
+sess.run(tf.tables_initializer())
+```
+
+기본적으로 필요한 것들을 임포트하였습니다. 이제 데이터를 불러오고, 5개만 출력해보겠습니다.
+
+파일 다운로드 링크 : https://www.kaggle.com/uciml/sms-spam-collection-dataset
+
+
+```python
+import pandas as pd
+data = pd.read_csv('spam.csv', encoding='latin-1')
+data[:5]
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>v1</th>
+      <th>v2</th>
+      <th>Unnamed: 2</th>
+      <th>Unnamed: 3</th>
+      <th>Unnamed: 4</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>ham</td>
+      <td>Go until jurong point, crazy.. Available only ...</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>ham</td>
+      <td>Ok lar... Joking wif u oni...</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>spam</td>
+      <td>Free entry in 2 a wkly comp to win FA Cup fina...</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>ham</td>
+      <td>U dun say so early hor... U c already then say...</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>ham</td>
+      <td>Nah I don't think he goes to usf, he lives aro...</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+여기서 필요한 건 v2열과 v1열입니다. v1열은 숫자 레이블로 바꿔야 할 필요가 있습니다. 이를 각각 X_data와 y_data로 저장하겠습니다.
+
+
+```python
+data['v1'] = data['v1'].replace(['ham','spam'],[0,1])
+y_data = list(data['v1'])
+X_data = list(data['v2'])
+```
+
+v2열을 X_data에 저장합니다. v1열에 있는 ham과 spam 레이블을 각각 숫자 0과 1로 바꾸고 y_data에 저장합니다. 정상적으로 저장되었는지 이를 각각 5개만 출력해보겠습니다.
+
+
+```python
+X_data[:5]
+```
+
+
+
+
+    ['Go until jurong point, crazy.. Available only in bugis n great world la e buffet... Cine there got amore wat...',
+     'Ok lar... Joking wif u oni...',
+     "Free entry in 2 a wkly comp to win FA Cup final tkts 21st May 2005. Text FA to 87121 to receive entry question(std txt rate)T&C's apply 08452810075over18's",
+     'U dun say so early hor... U c already then say...',
+     "Nah I don't think he goes to usf, he lives around here though"]
+
+
+
+
+```python
+print(y_data[:5])
+```
+
+    [0, 0, 1, 0, 0]
+    
+
+훈련 데이터와 테스트 데이터를 8:2 비율로 분할해보겠습니다. 그런데 그 전에 이를 위해 전체 데이터 개수의 80%와 20%는 각각 몇 개인지 확인합니다.
+
+
+```python
+print(len(X_data))
+n_of_train = int(len(X_data) * 0.8)
+n_of_test = int(len(X_data) - n_of_train)
+print(n_of_train)
+print(n_of_test)
+```
+
+    5572
+    4457
+    1115
+    
+
+전체 데이터는 5,572개이며 8:2로 비율하면 각각 4,457과 1,115가 됩니다. 이를 각각 훈련 데이터와 테스트 데이터의 양으로 하여 데이터를 분할하겠습니다.
+
+
+```python
+import numpy as np
+X_train = np.asarray(X_data[:n_of_train]) #X_data 데이터 중에서 앞의 4457개의 데이터만 저장
+y_train = np.asarray(y_data[:n_of_train]) #y_data 데이터 중에서 앞의 4457개의 데이터만 저장
+X_test = np.asarray(X_data[n_of_train:]) #X_data 데이터 중에서 뒤의 1115개의 데이터만 저장
+y_test = np.asarray(y_data[n_of_train:]) #y_data 데이터 중에서 뒤의 1115개의 데이터만 저장
+```
+
+이제 훈련을 위한 데이터 준비는 끝났습니다. 이제 ELMo와 설계한 모델을 연결하는 작업들을 진행해보겠습니다. ELMo는 텐서플로우 허브로부터 가져온 것이기 때문에 케라스에서 사용하기 위해서는 케라스에서 사용할 수 있도록 변환해주는 작업들이 필요합니다.
+
+
+```python
+def ELMoEmbedding(x):
+    return elmo(tf.squeeze(tf.cast(x, tf.string)), as_dict=True, signature="default")["default"]
+# 데이터의 이동이 케라스 → 텐서플로우 → 케라스가 되도록 하는 함수
+```
+
+이제 모델을 설계합니다.
+
+
+```python
+from keras.models import Model
+from keras.layers import Dense, Lambda, Input
+
+input_text = Input(shape=(1,), dtype=tf.string)
+embedding_layer = Lambda(ELMoEmbedding, output_shape=(1024, ))(input_text)
+hidden_layer = Dense(256, activation='relu')(embedding_layer)
+output_layer = Dense(1, activation='sigmoid')(hidden_layer)
+model = Model(inputs=[input_text], outputs=output_layer)
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+```
+
+모델은 ELMo를 이용한 임베딩 층을 거쳐서 256개의 뉴런이 있는 은닉층을 거친 후 마지막 1개의 뉴런을 통해 이진 분류를 수행합니다. 이진 분류를 위한 마지막 뉴런의 활성화 함수는 시그모이드 함수이며, 모델의 손실 함수는 binary_crossentropy입니다.
+
+
+```python
+history = model.fit(X_train, y_train, epochs=1, batch_size=60)
+```
+
+```
+Epoch 1/1
+4457/4457 [==============================] - 1508s 338ms/step - loss: 0.1129 - acc: 0.9619
+```
+
+
+```python
+print("\n 테스트 정확도: %.4f" % (model.evaluate(X_test, y_test)[1]))
+```
+
+```
+1115/1115 [==============================] - 381s 342ms/step
+테스트 정확도: 0.9803
+```
+
+1번의 에포크에서 98%의 정확도를 얻어냅니다.
+
+참고 자료 :<br/>
+http://www.realworldnlpbook.com/blog/improving-sentiment-analyzer-using-elmo.html<br/>
+https://createmomo.github.io/2018/01/23/Super-Machine-Learning-Revision-Notes/<br/>
+https://www.analyticsvidhya.com/blog/2019/03/learn-to-use-elmo-to-extract-features-from-text/<br/>
+http://www.davidsbatista.net/blog/2018/12/06/Word_Embeddings/<br/>
+https://lilianweng.github.io/lil-log/2019/01/31/generalized-language-models.html#bidirectional-language-model<br/>
+https://medium.com/saarthi-ai/elmo-for-contextual-word-embedding-for-text-classification-24c9693b0045<br/>
+
+char CNN 참고 자료 :<br/>
+https://www.slideshare.net/JaeminCho6/dl-chatbot-seminar-day-02<br/>
+
+한국어에 대한 ELMo :<br/>
+https://github.com/HIT-SCIR/ELMoForManyLangs<br/>
+
+ELMo로 단어 몇 개만 임베딩 벡터 얻어보기 :<br/>
+https://medium.com/@joeyism/embedding-with-tensorflow-hub-in-a-simple-way-using-elmo-d1bfe0ada45c<br/>
